@@ -158,6 +158,44 @@ def check(root: Path) -> dict:
     return out
 
 
+# ---------- Thanh phan dang chay ----------
+
+# Thanh phan -> (doan cuoi tham so dong lenh, thu muc lam viec tuong doi so voi goc du an)
+COMPONENTS = {
+    "foxprofile": ("main.py", "foxprofile/data"),
+    "bot": ("muse_telebot.py", "muse_telebot"),
+    "autopost": ("auto_post.py", "social_post"),
+}
+# Tac vu Task Scheduler cua watchdog (apps_monitor) tu mo lai thanh phan khi no chet, neu may co cai.
+MANAGED_TASKS = {"foxprofile": "Muse2tele_FoxProfile", "bot": "Muse2tele_Bot", "autopost": "Muse2tele_AutoPost"}
+
+
+def component_running(root: Path, name: str) -> bool:
+    try:
+        import psutil
+    except ImportError:
+        return False
+    arg, cwd_rel = COMPONENTS[name]
+    want = os.path.normcase(str((root / cwd_rel).resolve()))
+    for p in psutil.process_iter(["name", "cmdline", "cwd"]):
+        try:
+            if not (p.info["name"] or "").lower().startswith("python") or p.pid == os.getpid():
+                continue
+            args = p.info["cmdline"] or []
+            if any(a.lower().endswith(arg) for a in args[1:]) and os.path.normcase(p.info["cwd"] or "") == want:
+                return True
+        except (psutil.Error, OSError):
+            continue
+    return False
+
+
+def task_exists(name: str) -> bool:
+    if os.name != "nt":
+        return False
+    return subprocess.run(["schtasks", "/query", "/tn", name], capture_output=True,
+                          creationflags=_NO_WINDOW).returncode == 0
+
+
 # ---------- Ap dung ----------
 
 class Updater:
@@ -352,10 +390,19 @@ class Updater:
 
     # -- buoc 4: khoi dong lai --
     def start_services(self, profiles: list[str]) -> None:
-        bat = self.root / "start_all.bat"
-        flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
-        subprocess.Popen(["cmd.exe", "/c", str(bat)], cwd=self.root, creationflags=flags, close_fds=True)
-        self.log("Da chay start_all.bat, cho FoxProfile san sang...")
+        # May co watchdog (Task Scheduler + apps_monitor) thi no tu mo lai cac thanh phan co tac vu: cho no, khong
+        # mo them ban trung. Thanh phan nao van chua chay (khong co tac vu / watchdog tat) thi start_all.bat mo.
+        managed = [c for c, task in MANAGED_TASKS.items() if task_exists(task)]
+        if managed:
+            self.log(f"Watchdog quan ly {managed}: cho no mo lai (toi da 120s)")
+            deadline = time.time() + 120
+            while time.time() < deadline and not all(component_running(self.root, c) for c in managed):
+                time.sleep(3)
+        if not all(component_running(self.root, c) for c in COMPONENTS):
+            bat = self.root / "start_all.bat"
+            flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
+            subprocess.Popen(["cmd.exe", "/c", str(bat)], cwd=self.root, creationflags=flags, close_fds=True)
+            self.log("Da chay start_all.bat (chi mo thanh phan chua chay), cho FoxProfile san sang...")
         deadline = time.time() + 300
         while time.time() < deadline:
             try:
@@ -416,7 +463,9 @@ class Updater:
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description="Kiem tra / cap nhat Muse2Tele tu GitHub, giu nguyen du lieu")
-    ap.add_argument("action", choices=["check", "apply"])
+    ap.add_argument("action", choices=["check", "apply", "running"])
+    ap.add_argument("component", nargs="?", choices=sorted(COMPONENTS),
+                    help="running: ma thoat 0 neu thanh phan nay dang chay (dung trong start_*.bat)")
     ap.add_argument("--root", default=None, help="Thu muc Muse2Tele (mac dinh: noi chua updater.py)")
     ap.add_argument("--fox-url", default=os.environ.get("FOXPROFILE_URL", "http://127.0.0.1:8090"))
     ap.add_argument("--fox-pid", type=int, default=None, help="PID FoxProfile can tat")
@@ -428,6 +477,10 @@ def main() -> None:
     if a.action == "check":
         print(json.dumps(check(root), ensure_ascii=False, indent=2))
         return
+    if a.action == "running":
+        if not a.component:
+            ap.error("running can ten thanh phan: " + ", ".join(sorted(COMPONENTS)))
+        sys.exit(0 if component_running(root, a.component) else 1)
     sys.exit(Updater(root, a.fox_url, a.fox_pid, not a.no_restart).run())
 
 
