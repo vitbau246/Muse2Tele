@@ -36,7 +36,7 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from logging.handlers import RotatingFileHandler
+from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -97,7 +97,8 @@ VN_WARNING = ("🚫 <b>CẢNH BÁO: profile <code>{profile}</code> đang vào Mu
 LOG_FILE = HERE / "muse_telebot.log"
 _root = logging.getLogger("muse")
 _root.setLevel(logging.INFO)
-for _handler in (RotatingFileHandler(LOG_FILE, maxBytes=2 * 1024 * 1024, backupCount=2, encoding="utf-8"),
+# Giu log ~1 tieng gan nhat: moi 10 phut sang file moi (muse_telebot.log.YYYY-mm-dd_HH-MM), giu 6 file cu.
+for _handler in (TimedRotatingFileHandler(LOG_FILE, when="M", interval=10, backupCount=6, encoding="utf-8"),
                  logging.StreamHandler()):
     _handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
     _root.addHandler(_handler)
@@ -110,6 +111,7 @@ bot = telebot.TeleBot(TOKEN, parse_mode=None, threaded=False) if TOKEN else None
 jobs = queue.Queue()
 profile_queues = {}
 profile_queues_lock = threading.Lock()
+busy_keys = set()  # profile dang xu ly 1 lenh (profile_worker): doi soat bo qua
 relays = {}
 relay_lock = threading.Lock()
 state_lock = threading.Lock()
@@ -294,10 +296,18 @@ def process(batch, retry=False):
     if ok:
         if retry:
             safe_reply(first, "✅ Muse đã hoạt động lại, tin này đã được gửi.")
+        remember_sent(chat, first, text)
         relay(chat, first, seen)
         return True
     safe_reply(first, f"⚠️ Chưa gửi được cho Muse: {result}")
     return True
+
+
+def remember_sent(chat, m, text):
+    """Ghi tin cuoi da gui vao Muse de doi soat (reconcile_loop kiem tra no con tren Muse khong)."""
+    entry = {"mid": m.message_id, "chat_id": m.chat.id, "topic": topic_of(m), "text": text,
+             "at": time.time(), "verified": False, "resends": 0}
+    update_state(lambda s: s.setdefault("last_sent", {}).__setitem__(chat["key"], entry))
 
 
 def safe_reply(m, text):
@@ -393,6 +403,8 @@ def profile_worker(work):
             else:
                 pending = nxt
                 break
+        busy_key = (job.get("chat") or {}).get("key") or job.get("key") or job.get("profile")
+        busy_keys.add(busy_key)
         try:
             if job["kind"] == "stalled":
                 run_stalled(job["key"])
@@ -415,9 +427,12 @@ def profile_worker(work):
                 continue
             if "m" in job:
                 safe_reply(job["m"], f"⚠️ Lỗi xử lý tin: {type(e).__name__}: {e}")
+        finally:
+            busy_keys.discard(busy_key)
 
 
 def enqueue(m, chat, text, kind="msg"):
+    logger.info(f"Nhan TG {m.message_id} ({kind}/{getattr(m, 'content_type', '?')}) -> {chat['key']}: {text[:150]!r}")
     jobs.put({"kind": kind, "m": m, "chat": chat, "text": text})
     if kind == "msg":
         react(m, "👀")
@@ -533,6 +548,8 @@ def send_media(target, kind, data, name, caption):
 
 def send_reply(fox, msg, target, key, chat=None):
     """Gui 1 tin cua Muse (chu + nut bam + anh/video/file) ve topic."""
+    logger.info(f"Gui ve TG {key}: tin Muse {msg['id'][:30]} ({len(msg.get('text') or '')} ky tu, "
+                f"{len(msg.get('media') or [])} anh/video/file): {(msg.get('text') or '')[:100]!r}")
     text, kb = msg.get("html") or html.escape(msg["text"]), None
     found = BUTTONS_RE.search(msg["text"])
     labels = msg.get("choices") or []
@@ -572,6 +589,7 @@ def send_reply(fox, msg, target, key, chat=None):
                 raise ValueError(f"tai ve {mime or 'rong'} ({len(data)} byte), khong phai video")
             name = re.sub(r'[\\/:*?"<>|\s]+', "_", a.get("name") or "") or base + (mimetypes.guess_extension(mime) or "")
             send_media(target, kind, data, name, title[:1000] or None)
+            logger.info(f"{key}: da gui {kind} {name} ({len(data) // 1024} KB) ve TG")
             del data
         except Exception as e:
             if kind == "video" and isinstance(e, (TooLarge, requests.RequestException, ApiTelegramException)):
@@ -1087,6 +1105,103 @@ def check_update():
            f"cài đặt) được giữ nguyên; FoxProfile, bot và AutoPost sẽ tự khởi động lại.", parse_mode="HTML")
 
 
+# ---------- doi soat dinh ky: tin cuoi tren Muse <-> Telegram ----------
+
+RECONCILE_SECONDS = 30   # moi 30s, profile khong xu ly lenh nao thi doi soat
+RECONCILE_GRACE = 45     # tin TG vua gui < 45s thi chua xet (Muse co the chua hien)
+RECONCILE_RESEND_MAX = 2
+
+
+def _idle(key):
+    with profile_queues_lock:
+        work = profile_queues.get(key)
+    with relay_lock:
+        relaying = key in relays
+    with stalled_lock:
+        waiting = key in stalled
+    return key not in busy_keys and not (work and work.qsize()) and not relaying and not waiting
+
+
+def _on_muse(msgs, text):
+    want = muse_sync._flat(text)[:60]
+    return any(m["role"] == "user" and not m.get("failed") and want in muse_sync._flat(m.get("text")) for m in msgs)
+
+
+def reconcile_chat(chat, runs):
+    """(trang thai Muse->TG, trang thai TG->Muse) cua 1 profile; gui bu ben thieu."""
+    key = chat["key"]
+    fox = muse_sync.FoxProfileBrowser(chat["profile"], log=logger.debug)
+    if not fox.profile_exists() or not fox.is_running():
+        return "tat", "tat"
+    fox.tab = chat["url"]
+    msgs = muse_sync.messages(fox)
+    state = load_state()
+    # Muse -> Telegram: tin cuoi cua Muse (co noi dung, viet xong) da chuyen chua
+    muse_tg = "-"
+    done = [m for m in msgs if m["role"] == "assistant" and (m["text"] or m["media"]) and not m["streaming"]]
+    if done:
+        last = done[-1]
+        if last["id"] in (state.get("delivered") or {}).get(key, []):
+            muse_tg = "ok"
+        else:
+            muse_tg = "THIEU"
+            logger.warning(f"Doi soat {key}: tin cuoi Muse {last['id'][:30]} chua co tren TG -> gui bu")
+            r = runs.setdefault(key, {"seen": set(), "waiting": {}, "reloaded": 0, "retry": 0})
+            deliver_new(fox, chat, r, tg_target(chat["tg"]), muse_sync.is_busy(fox))
+    # Telegram -> Muse: tin cuoi ban gui da co tren Muse chua
+    ls = (state.get("last_sent") or {}).get(key)
+    if not ls or not ls.get("text") or ls.get("verified"):
+        return muse_tg, "ok" if ls else "-"
+    if time.time() - ls["at"] < RECONCILE_GRACE:
+        return muse_tg, "cho"
+    found = _on_muse(msgs, ls["text"])
+    if not found:  # trang co the dang o tab khac / tin tam: tai lai trang (du lieu that tren server) roi xem lai
+        muse_sync.reload_chat(fox, chat["url"])
+        found = _on_muse(muse_sync.messages(fox), ls["text"])
+    if found:
+        update_state(lambda s: s["last_sent"][key].update(verified=True))
+        logger.info(f"Doi soat {key}: tin TG {ls['mid']} da co tren Muse")
+        return muse_tg, "ok"
+    target = SimpleNamespace(chat=SimpleNamespace(id=ls["chat_id"]), message_thread_id=ls["topic"],
+                             is_topic_message=bool(ls["topic"]))
+    if ls.get("resends", 0) >= RECONCILE_RESEND_MAX:
+        update_state(lambda s: s["last_sent"][key].update(verified=True))
+        logger.error(f"Doi soat {key}: tin TG {ls['mid']} van khong co tren Muse sau {RECONCILE_RESEND_MAX} lan gui lai")
+        safe_reply(target, f"⚠️ Muse vẫn chưa nhận tin này sau {RECONCILE_RESEND_MAX} lần gửi lại, bạn gửi lại giúp: "
+                           f"{ls['text'][:300]}")
+        return muse_tg, "BO"
+    logger.warning(f"Doi soat {key}: tin TG {ls['mid']} KHONG co tren Muse -> gui lai (lan {ls.get('resends', 0) + 1})")
+    seen = set()
+    ok, result = muse_sync.send(chat, ls["text"], seen=seen)
+    logger.info(f"Gui lai TG {ls['mid']} -> {key}: {result}")
+    update_state(lambda s: s["last_sent"][key].update(resends=ls.get("resends", 0) + 1, at=time.time()))
+    if ok:
+        safe_reply(target, "🔁 Muse chưa nhận tin trước của bạn (lỗi Delivery not confirmed), bot đã gửi lại.")
+        relay(chat, target, seen)
+    return muse_tg, "GUI LAI" if ok else "LOI"
+
+
+def reconcile_loop():
+    runs = {}
+    while True:
+        time.sleep(RECONCILE_SECONDS)
+        if not group_id():
+            continue
+        summary = []
+        for chat in mapped_chats():
+            key = chat["key"]
+            if not _idle(key):
+                summary.append(f"{key}=ban")
+                continue
+            try:
+                a, b = reconcile_chat(chat, runs)
+                summary.append(f"{key}={a}/{b}")
+            except Exception as e:
+                summary.append(f"{key}=loi")
+                logger.warning(f"Doi soat {key} loi: {type(e).__name__}: {e}")
+        logger.info("Doi soat (Muse->TG / TG->Muse): " + ", ".join(summary))
+
+
 def topics_loop():
     last_ip = 0
     last_update = time.time() - UPDATE_CHECK_SECONDS + 120  # lan dau: 2 phut sau khi bot chay
@@ -1427,7 +1542,7 @@ def main():
             shutil.rmtree(p, ignore_errors=True)
     register_handlers()
     set_commands()
-    for target in (worker, watch_loop, topics_loop, startup_report):
+    for target in (worker, watch_loop, topics_loop, reconcile_loop, startup_report):
         threading.Thread(target=target, daemon=True).start()
     threading.Thread(target=muse_auto.loop,
                      args=(lambda: list(topics()), lambda p, ctx: logger.info(f"Auto Allow ({p}): {ctx[:300]}")),
