@@ -597,8 +597,14 @@ def send_reply(fox, msg, target, key, chat=None):
 
 def deliver_new(fox, chat, r, target, busy):
     """Gui ve Telegram cac tin moi cua Muse da viet xong. Tra ve True neu con tin dang viet / dang tai."""
+    # Tin da chuyen (ghi trong state) bo qua ngay: sau khi bot khoi dong lai r["seen"] rong, tin cu khong chu luc Muse
+    # dang ban se lam vong nay dung cho mai, khong toi duoc tin moi phia sau.
+    delivered = set((load_state().get("delivered") or {}).get(chat["key"], []))
     for msg in muse_sync.messages(fox):
         if msg["role"] != "assistant" or msg["id"] in r["seen"]:
+            continue
+        if msg["id"] in delivered:
+            r["seen"].add(msg["id"])
             continue
         if msg["streaming"]:
             return True

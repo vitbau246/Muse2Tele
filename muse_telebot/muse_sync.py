@@ -140,6 +140,18 @@ MESSAGES_JS = r"""() => {
       : ['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext) ? 'image' : ['mp3', 'wav', 'm4a', 'ogg'].includes(ext) ? 'audio' : '';
     if (kind) linked.push({kind, src: a.href, title: name.trim(), name: file});
   }
+  // Video nhung ngay trong than tin (khung bam de xem, data-hatch-video-src = link kho cong khai muse.ai/files/...),
+  // khong phai khung dinh kem cuoi tin: VD "Rong Lua — ..." + video ngay duoi. Chu thich = dong chu dam ngay truoc.
+  // Kiem tra 2026-11-05.
+  for (const w of item.querySelectorAll('[data-hatch-video-wrapper][data-hatch-video-src]')) {
+    const src = w.getAttribute('data-hatch-video-src') || '';
+    if (!/^https?:/.test(src) || w.closest('[data-testid^="hatch-chat-attachment-presentation-"]')
+        || linked.some(l => l.src === src)) continue;
+    const file = decodeURIComponent(new URL(src).pathname.split('/').pop());
+    const strong = w.parentElement && w.parentElement.querySelector('[data-streamdown="strong"], strong, b');
+    const title = (strong ? strong.innerText : (w.getAttribute('aria-label') || '').replace(/^Open (animated )?video\s*/i, '')).trim();
+    linked.push({kind: 'video', src, title: title || file, name: file});
+  }
   out.streaming = !!(md && md.getAttribute('data-hatch-markdown-streaming') === 'true')
     || item.querySelector('[aria-busy="true"]') !== null;
   // Muse hoi lua chon bang khung nut rieng duoi chu (khong co dong [[nút: ...]]): lay nhan cac nut; nut "More options"
