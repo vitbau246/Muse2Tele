@@ -336,9 +336,15 @@ def delivered(fox, before):
     deadline = time.time() + DELIVERY_CONFIRM_SECONDS
     while True:
         new = [m for m in messages(fox) if m["id"] not in before]
-        if any(m["role"] == "user" and m.get("failed") for m in new):
+        failed = [m for m in new if m["role"] == "user" and m.get("failed")]
+        if failed:
+            logger.warning(f"{fox.profile}: Muse bao 'Delivery not confirmed' cho tin: {failed[0].get('text', '')[:80]!r}")
             return False
-        if any(m["role"] == "assistant" for m in new) or fox.evaluate(BUSY_JS) or time.time() >= deadline:
+        if any(m["role"] == "assistant" for m in new) or fox.evaluate(BUSY_JS):
+            return True
+        if time.time() >= deadline:
+            logger.warning(f"{fox.profile}: sau {DELIVERY_CONFIRM_SECONDS}s Muse chua tra loi / chua lam viec, "
+                           f"khong thay loi -> coi nhu da gui (tab {fox.tab}: {fox.url()})")
             return True
         time.sleep(1)
 
@@ -353,6 +359,11 @@ def try_send(chat, text, files, refresh, seen=None, base=None):
     if not fox.profile_exists():
         return False, f"Profile '{profile}' chua co trong FoxProfile."
     open_chat(fox, chat["url"], refresh)
+    # Giu dung tab vua mo theo SO THU TU: gui xong Muse co the chuyen tab sang trang khac (VD /goals), tim theo URL
+    # se doc nham tab khac -> khong thay "Delivery not confirmed" va bao gui thanh cong sai. Kiem tra 2026-11-05.
+    index = next((t["index"] for t in fox.tabs() if same_url(t["url"], chat["url"])), None)
+    if index is not None:
+        fox.tab = index
     current = messages(fox)
     before = {m["id"] for m in current}
     if base is not None:
@@ -387,6 +398,9 @@ def try_send(chat, text, files, refresh, seen=None, base=None):
         if cleared and any(m["role"] == "user" and m["id"] not in before for m in messages(fox)):
             if not delivered(fox, before):
                 return False, f"{key}: Muse bao \"Delivery not confirmed\", chua gui duoc."
+            now_url = fox.url()
+            if not same_url(now_url, chat["url"]):
+                logger.warning(f"{key}: gui xong tab chat chuyen sang {now_url}")
             return True, f"Da gui vao {key}."
     if cleared:
         return False, f"{key}: o chat da xoa nhung tin khong hien trong chat, chua gui duoc."
