@@ -22,7 +22,7 @@ from ..theme.styles import ACCENT_STYLE, DLG_FIELD_KWARGS, OUTLINE_STYLE
 def open_profile_dialog(
     page: ft.Page,
     proxy_service: IProxyService,
-    on_save: Callable[[str, str, str, str, str, str], str | None],
+    on_save: Callable[[str, str, str, str, str, str, bool, bool], str | None],
     profile: Profile | None = None,
 ) -> None:
     is_edit = profile is not None
@@ -93,6 +93,16 @@ def open_profile_dialog(
         text_style=_DATA,
         **DLG_FIELD_KWARGS,
     )
+    fanpage_cb = ft.Checkbox(
+        label=get_string("auto_post_fanpage"),
+        value=profile.auto_post_fanpage if profile is not None else False,
+        active_color=COLORS["sidebar"],
+    )
+    tiktok_cb = ft.Checkbox(
+        label=get_string("auto_post_tiktok"),
+        value=profile.auto_post_tiktok if profile is not None else False,
+        active_color=COLORS["sidebar"],
+    )
     geo_error = ft.Text("", size=12, color=COLORS["error"], visible=False)
     # The Check IP report is the only part that can grow; it scrolls on its own
     # so the dialog keeps its height on short windows.
@@ -155,7 +165,16 @@ def open_profile_dialog(
                 page.update()
                 return
 
-        error = on_save(name, proxy, os_type, timezone, locale, engine)
+        error = on_save(
+            name,
+            proxy,
+            os_type,
+            timezone,
+            locale,
+            engine,
+            bool(fanpage_cb.value),
+            bool(tiktok_cb.value),
+        )
         if error:
             name_error.value = error
             name_error.visible = True
@@ -233,6 +252,7 @@ def open_profile_dialog(
                     ft.Text(get_string("geo_follow_hint"), size=12, color=COLORS["text_dim"]),
                     geo_error,
                     geo_result,
+                    _auto_post_section(fanpage_cb, tiktok_cb),
                 ],
             ),
         ),
@@ -255,6 +275,32 @@ def open_profile_dialog(
 
 _DATA = ft.TextStyle(font_family=FONT_DATA, size=13)
 _WARN_TINT = COLORS["warn_tint"]
+
+
+def _auto_post_section(fanpage_cb: ft.Checkbox, tiktok_cb: ft.Checkbox) -> ft.Container:
+    """Two ticks for Muse2Tele's social_post, set apart from the browser identity above."""
+    return ft.Container(
+        margin=ft.Margin.only(top=14),
+        padding=ft.Padding.only(left=12, right=12, top=10, bottom=8),
+        border_radius=8,
+        border=ft.Border.all(1, COLORS["card_border"]),
+        bgcolor=COLORS["bg"],
+        content=ft.Column(
+            spacing=2,
+            tight=True,
+            controls=[
+                ft.Text(
+                    get_string("auto_post_title"),
+                    size=12.5,
+                    font_family=FONT_SEMIBOLD,
+                    color=COLORS["text_sub"],
+                ),
+                fanpage_cb,
+                tiktok_cb,
+                ft.Text(get_string("auto_post_hint"), size=12, color=COLORS["text_dim"]),
+            ],
+        ),
+    )
 
 
 def _field(label: str, control: ft.Control, hint: str | None = None) -> ft.Column:

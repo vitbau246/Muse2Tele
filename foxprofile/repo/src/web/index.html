@@ -176,6 +176,26 @@ main { min-width: 0; padding: 26px 32px 40px; }
 .note.calm { background: var(--paper-sunk); color: var(--ink-2); }
 .check { display: flex; gap: 8px; align-items: center; margin-top: 10px; font-size: 13.5px; cursor: pointer; }
 .note.calm svg { color: var(--ink-3); }
+.box { margin-top: 16px; padding: 10px 12px 12px; border: 1px solid var(--rule); border-radius: 8px; background: var(--paper); }
+.box-title { font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.box .check { margin-top: 8px; }
+.box .hint { margin-top: 8px; font-size: 12px; color: var(--ink-3); }
+.ap { display: inline-flex; gap: 4px; }
+.ap b { display: inline-flex; align-items: center; height: 17px; padding: 0 5px; border-radius: 3px; border: 1px solid var(--cover); color: var(--cover); font-size: 10.5px; font-weight: 600; }
+.upd { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--rule); background: var(--paper-sunk); font-size: 13px; }
+.upd.new { background: var(--act-soft); }
+.upd.ok { background: var(--paper-raised); }
+.upd.bad { background: var(--warn-tint); }
+.upd b { display: block; font-weight: 600; font-size: 13.5px; }
+.upd span.sub { color: var(--ink-2); font-size: 12px; }
+.upd .grow2 { flex: 1; min-width: 0; }
+.upd .btn { height: 34px; }
+.upd-list { margin: 8px 0 0; padding: 8px 12px 8px 26px; border: 1px solid var(--rule); border-radius: 8px; background: var(--paper); font-size: 12.5px; }
+.upd-list li { margin: 2px 0; }
+.dir-row { display: flex; gap: 6px; margin-top: 6px; }
+.dir-row input { flex: 1; min-width: 0; }
+.explain { margin: 4px 0 0; font-size: 12.5px; color: var(--ink-2); }
+.sec-title { margin-top: 16px; font-size: 13px; font-weight: 600; }
 .geo { margin-top: 12px; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; font-size: 13px; }
 .geo .line { display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; border-top: 1px solid var(--rule); }
 .geo .line:first-child { border-top: 0; }
@@ -342,6 +362,8 @@ code { font-family: var(--data); font-size: 12.5px; background: var(--paper-sunk
     <div class="grow"></div>
     <div class="rail-foot">
       <button class="rail-link" id="settings-btn"><svg class="i"><use href="#i-folder"/></svg><span data-t="settings_button"></span></button>
+      <button class="rail-link" id="upload-btn"><svg class="i"><use href="#i-upload"/></svg><span data-t="upload_button"></span></button>
+      <button class="rail-link hidden" id="update-btn"><svg class="i"><use href="#i-download"/></svg><span data-t="update_check"></span></button>
       <button class="rail-link" id="mcp-btn"><svg class="i"><use href="#i-bot"/></svg><span data-t="mcp_button"></span></button>
       <a class="rail-link" href="/docs" target="_blank" rel="noopener"><svg class="i"><use href="#i-docs"/></svg><span data-t="api_docs"></span></a>
       <button class="rail-link hidden" id="logout-btn"><svg class="i"><use href="#i-logout"/></svg><span data-t="logout"></span></button>
@@ -349,6 +371,7 @@ code { font-family: var(--data); font-size: 12.5px; background: var(--paper-sunk
     </div>
   </aside>
   <main>
+    <div id="update-slot"></div>
     <div class="head">
       <div><h1 data-t="your_profiles"></h1><div class="counts" id="counts"></div></div>
       <label class="search"><svg class="i s" aria-hidden="true"><use href="#i-search"/></svg><input id="search" type="search" autocomplete="off"></label>
@@ -417,6 +440,27 @@ const I18N = {
     launching: "Đang mở {name}...", started: "Đã mở {name}", stopped: "Đã dừng {name}", created: "Đã tạo {name}", saved: "Đã lưu",
     deleted: "Đã xoá {name}", deleted_n: "Đã xoá {n} profile", exported: "Đã xuất {n} cookie", imported: "Đã nhập {n} cookie", fp_reset: "Đã tạo fingerprint mới",
     settings_button: "Thư mục tải về", settings_title: "Thư mục tải về", settings_sub: "File tải từ trình duyệt của mọi profile được lưu vào đây. Đổi xong áp dụng ngay, kể cả profile đang chạy.",
+    upload_button: "Thư mục upload", upload_title: "Thư mục upload", upload_sub: "Nơi bot và trình duyệt lấy file để gửi đi. Lưu vào {path}.",
+    upload_dirs_label: "FOXPROFILE_UPLOAD_DIRS — thư mục trình duyệt được phép upload",
+    upload_dirs_explain: "Để an toàn, FoxProfile chỉ đính kèm file (ảnh, video gửi lên Muse, Facebook, TikTok) nằm trong các thư mục này, kể cả thư mục con. File ở chỗ khác bị từ chối. Áp dụng cho profile mở sau khi lưu: profile đang chạy cần tắt rồi mở lại.",
+    upload_dirs_none: "Chưa có thư mục nào: tính năng upload đang tắt.", upload_dirs_add: "Thêm thư mục", upload_dirs_remove: "Bỏ",
+    upload_dir_hint: "Đường dẫn đầy đủ, ví dụ D:/Muse2Tele/Videos/downloads",
+    muse_dir_label: "MUSE_UPLOAD_DIR — nơi bot lưu file nhận từ Telegram",
+    muse_dir_explain: "Ảnh, video, file bạn gửi vào topic Telegram được lưu tạm ở đây rồi bot mới đính kèm lên Muse. Thư mục này phải nằm trong một thư mục upload ở trên. Bot đọc giá trị này lúc khởi động: đổi xong hãy chạy lại start_bot.bat.",
+    muse_dir_default: "Để trống để dùng mặc định: {path}", muse_dir_outside: "Thư mục này nằm ngoài các thư mục upload: FoxProfile sẽ từ chối file của bot.",
+    upload_saved: "Đã lưu thư mục upload. Mở lại profile đang chạy và bot để áp dụng.",
+    auto_post_title: "Tự động đăng bài", auto_post_fanpage: "Tự động đăng lên fanpage Facebook", auto_post_tiktok: "Tự động đăng lên TikTok",
+    auto_post_hint: "Muse2Tele đăng bằng chính tài khoản đã đăng nhập trong profile này. Hãy đăng nhập Facebook / TikTok trên trình duyệt của profile trước.",
+    auto_post_off: "Không tự đăng",
+    update_check: "Kiểm tra cập nhật", update_available: "Đã có phiên bản mới của Muse2Tele", update_open: "Xem thay đổi & cập nhật",
+    update_title: "Cập nhật Muse2Tele", update_versions: "Đang dùng: {local} → bản mới: {remote} ({date})", update_unknown: "chưa rõ (bản tải ZIP)",
+    update_changes: "Có gì mới", update_no_changes: "Không có danh sách thay đổi.",
+    update_keep: "Dữ liệu giữ nguyên: .env, profile (cookie, đăng nhập, fingerprint), video, cài đặt bot và thư mục upload.",
+    update_restart: "Profile đang chạy sẽ tắt rồi tự mở lại; FoxProfile, bot và AutoPost khởi động lại (1–3 phút). Trang này sẽ tự kết nối lại.",
+    update_backup: "File code bạn đã sửa tay được sao lưu vào .update/backup trước khi thay.", update_now: "Cập nhật ngay",
+    update_started: "Đang cập nhật… FoxProfile sẽ tự khởi động lại.", update_busy: "Đang cập nhật: {m}", update_done: "Đã cập nhật: {m}",
+    update_failed: "Cập nhật lỗi: {m}", update_latest: "Bạn đang dùng phiên bản mới nhất.", update_check_error: "Không kiểm tra được cập nhật: {e}",
+    update_checking: "Đang kiểm tra cập nhật…", dismiss: "Ẩn",
     settings_dir: "Thư mục lưu file", settings_hint: "Đường dẫn đầy đủ, ví dụ D:/Downloads/FoxProfile. Để trống để dùng mặc định.", settings_default: "Mặc định: {path}", settings_saved: "Đã lưu thư mục tải về", settings_save: "Lưu",
     mcp_button: "Kết nối AI (MCP)", mcp_title: "Kết nối AI agent qua MCP",
     mcp_intro: "Cho Claude, Cursor hay VS Code tự quản lý profile và lướt web giúp bạn: mở trang, đọc nội dung, click, gõ và chụp màn hình.",
@@ -474,6 +518,27 @@ const I18N = {
     launching: "Launching {name}...", started: "Started {name}", stopped: "Stopped {name}", created: "Created {name}", saved: "Saved",
     deleted: "Deleted {name}", deleted_n: "Deleted {n} profiles", exported: "Exported {n} cookies", imported: "Imported {n} cookies", fp_reset: "New fingerprint created",
     settings_button: "Download folder", settings_title: "Download folder", settings_sub: "Files downloaded in any profile's browser are saved here. A change applies at once, also to running profiles.",
+    upload_button: "Upload folders", upload_title: "Upload folders", upload_sub: "Where the bot and the browsers take files from. Saved to {path}.",
+    upload_dirs_label: "FOXPROFILE_UPLOAD_DIRS — folders browsers may upload from",
+    upload_dirs_explain: "For safety FoxProfile only attaches files (photos, videos sent to Muse, Facebook, TikTok) that lie inside these folders, subfolders included. Files anywhere else are refused. Applies to profiles launched after saving: restart profiles that are running.",
+    upload_dirs_none: "No folder yet: uploading is turned off.", upload_dirs_add: "Add folder", upload_dirs_remove: "Remove",
+    upload_dir_hint: "A full path, e.g. D:/Muse2Tele/Videos/downloads",
+    muse_dir_label: "MUSE_UPLOAD_DIR — where the bot saves files from Telegram",
+    muse_dir_explain: "Photos, videos and files you send into a Telegram topic are saved here first, then the bot attaches them in Muse. It must be inside one of the upload folders above. The bot reads it when it starts: restart start_bot.bat after changing it.",
+    muse_dir_default: "Leave empty for the default: {path}", muse_dir_outside: "This folder is outside the upload folders: FoxProfile will refuse the bot's files.",
+    upload_saved: "Upload folders saved. Restart running profiles and the bot to apply.",
+    auto_post_title: "Auto-post", auto_post_fanpage: "Auto-post to Facebook page", auto_post_tiktok: "Auto-post to TikTok",
+    auto_post_hint: "Muse2Tele posts with the accounts already logged in to this profile. Log in to Facebook / TikTok in the profile's browser first.",
+    auto_post_off: "No auto-post",
+    update_check: "Check for updates", update_available: "A new version of Muse2Tele is available", update_open: "See changes & update",
+    update_title: "Update Muse2Tele", update_versions: "Installed: {local} → new: {remote} ({date})", update_unknown: "unknown (ZIP download)",
+    update_changes: "What's new", update_no_changes: "No change list available.",
+    update_keep: "Your data stays as it is: .env, profiles (cookies, logins, fingerprints), videos, bot and upload settings.",
+    update_restart: "Running profiles are closed and reopened; FoxProfile, the bot and AutoPost restart (1–3 minutes). This page reconnects by itself.",
+    update_backup: "Code files you edited by hand are backed up in .update/backup before being replaced.", update_now: "Update now",
+    update_started: "Updating… FoxProfile will restart by itself.", update_busy: "Updating: {m}", update_done: "Updated: {m}",
+    update_failed: "Update failed: {m}", update_latest: "You are on the latest version.", update_check_error: "Could not check for updates: {e}",
+    update_checking: "Checking for updates…", dismiss: "Dismiss",
     settings_dir: "Save files to", settings_hint: "A full path, e.g. D:/Downloads/FoxProfile. Leave empty for the default.", settings_default: "Default: {path}", settings_saved: "Download folder saved", settings_save: "Save",
     mcp_button: "Connect AI (MCP)", mcp_title: "Connect an AI agent over MCP",
     mcp_intro: "Let Claude, Cursor or VS Code manage profiles and browse for you: open pages, read them, click, type and take screenshots.",
@@ -707,7 +772,7 @@ function row(p) {
     h("div", { class: "c-sel", role: "cell" }, box),
     h("div", { class: "c-name stack", role: "cell" },
       h("span", { class: "name", title: p.name }, p.name),
-      h("span", { class: "minor" }, engine)),
+      autoPostLine(p)),
     h("div", { class: "c-device device", role: "cell" }, h("span", { class: "os", title: p.os_type }, os),
       h("div", { class: "stack" }, h("span", { class: p.engine === "chrome" ? "engine chrome" : "engine" }, engine),
         fp && fp.exists ? h("span", { class: "data minor" }, [fp.screen, `${fp.hardware_concurrency || "?"} CPU`].filter(Boolean).join(" · "))
@@ -819,6 +884,11 @@ function field(label, input, hint) {
   return h("div", { class: "field" }, h("label", { for: input.id }, label), input, hint ? h("div", { class: "hint" }, hint) : null);
 }
 
+function autoPostLine(p) {
+  const on = [p.auto_post_fanpage && "Fanpage", p.auto_post_tiktok && "TikTok"].filter(Boolean);
+  return on.length ? h("span", { class: "ap" }, on.map((x) => h("b", {}, x))) : h("span", { class: "minor" }, t("auto_post_off"));
+}
+
 function openEditor(p) {
   modal((close) => {
     const name = h("input", { id: "f-name", value: p ? p.name : "", required: true, maxlength: 64, autocomplete: "off" });
@@ -834,6 +904,13 @@ function openEditor(p) {
     const proxy = h("input", { id: "f-proxy", value: p && p.proxy ? p.proxy : "", placeholder: "socks5://user:pass@host:port", autocomplete: "off", class: "data" });
     const tz = h("input", { id: "f-tz", value: p && p.timezone ? p.timezone : "", placeholder: t("tz_hint"), autocomplete: "off", class: "data" });
     const loc = h("input", { id: "f-locale", value: p && p.locale ? p.locale : "", placeholder: t("locale_hint"), autocomplete: "off", class: "data" });
+    const tick = (label, checked) => {
+      const box = h("input", { type: "checkbox" });
+      box.checked = !!checked;
+      return [box, h("label", { class: "check" }, box, h("span", {}, label))];
+    };
+    const [fanpage, fanpageRow] = tick(t("auto_post_fanpage"), p && p.auto_post_fanpage);
+    const [tiktok, tiktokRow] = tick(t("auto_post_tiktok"), p && p.auto_post_tiktok);
     const msg = h("div", { class: "msg", role: "status" });
     const geo = h("div");
     const say = (cls, text) => { msg.className = "msg " + cls; msg.textContent = text; };
@@ -860,7 +937,8 @@ function openEditor(p) {
       const submitBtn = e.currentTarget.querySelector(".modal-foot .btn-act");
       if (submitBtn) submitBtn.disabled = true;
       const body = { name: name.value.trim(), os_type: os.value, proxy: proxy.value.trim() || null,
-        timezone: tz.value.trim(), locale: loc.value.trim() };
+        timezone: tz.value.trim(), locale: loc.value.trim(),
+        auto_post_fanpage: fanpage.checked, auto_post_tiktok: tiktok.checked };
       if (!p) body.engine = engine.value;
       try {
         if (p) { await api("PATCH", `/profiles/${enc(p.name)}`, body); delete fingerprints[p.name]; toast(t("saved")); }
@@ -879,7 +957,9 @@ function openEditor(p) {
         msg,
         h("div", { class: "field-row" }, field(t("timezone"), tz), field(t("locale"), loc)),
         h("div", { class: "hint", style: "margin-top:6px;font-size:12px;color:var(--ink-3)" }, t("geo_hint")),
-        geo),
+        geo,
+        h("div", { class: "box" }, h("div", { class: "box-title" }, t("auto_post_title")), fanpageRow, tiktokRow,
+          h("div", { class: "hint" }, t("auto_post_hint")))),
       h("div", { class: "modal-foot" },
         h("button", { type: "button", class: "btn btn-line", onclick: close }, t("cancel")),
         h("button", { class: "btn btn-act" }, p ? t("save") : t("create"))));
@@ -1053,6 +1133,63 @@ async function openSettings() {
     return h("div", {}, modalHead(t("settings_title"), t("settings_sub"), close), form);
   });
 }
+async function openUploadDirs() {
+  let cfg;
+  try { cfg = await api("GET", "/settings/upload-dirs"); }
+  catch (e) { return toast(e.message, true); }
+  const museDefault = cfg.muse_default_dir;
+  modal((close) => {
+    const list = h("div");
+    const none = h("div", { class: "msg err" }, t("upload_dirs_none"));
+    const muse = h("input", { id: "f-musedir", class: "data", value: cfg.muse_custom ? cfg.muse_upload_dir : "", placeholder: museDefault, autocomplete: "off", spellcheck: "false" });
+    const outside = h("div", { class: "note" }, icon("alert", true), h("span", {}, t("muse_dir_outside")));
+    const values = () => [...list.querySelectorAll("input")].map((i) => i.value.trim()).filter(Boolean);
+    const norm = (s) => s.replace(/[\\/]+/g, "/").replace(/\/$/, "").toLowerCase();
+    const sync = () => {
+      const v = values();
+      none.style.display = v.length ? "none" : "";
+      const m = norm(muse.value.trim() || museDefault);
+      const inside = v.some((d) => { const r = norm(d); return m === r || m.startsWith(r + "/"); });
+      outside.style.display = cfg.bot_installed && v.length && m && !inside ? "" : "none";
+    };
+    const addRow = (value = "") => {
+      const input = h("input", { class: "data", value, placeholder: t("upload_dir_hint"), autocomplete: "off", spellcheck: "false", oninput: sync });
+      const row = h("div", { class: "dir-row" }, input,
+        h("button", { type: "button", class: "icon-btn", title: t("upload_dirs_remove"), "aria-label": t("upload_dirs_remove"), onclick: () => { row.remove(); sync(); } }, icon("x")));
+      list.append(row);
+      return input;
+    };
+    cfg.upload_dirs.forEach((d) => addRow(d));
+    muse.oninput = sync;
+    const msg = h("div", { class: "msg", role: "status" });
+    const save = h("button", { class: "btn btn-act", type: "submit" }, t("settings_save"));
+    const form = h("form", {
+      onsubmit: async (e) => {
+        e.preventDefault();
+        save.disabled = true; msg.className = "msg"; msg.textContent = "";
+        try {
+          await api("PUT", "/settings/upload-dirs", { upload_dirs: values(), muse_upload_dir: muse.value.trim() });
+          close(); toast(t("upload_saved"));
+        } catch (err) { msg.className = "msg err"; msg.textContent = err.message; save.disabled = false; }
+      },
+    },
+      h("div", { class: "modal-body" },
+        h("div", { class: "sec-title" }, t("upload_dirs_label")),
+        h("p", { class: "explain" }, t("upload_dirs_explain")),
+        list, none,
+        h("div", { class: "inline-btns" }, h("button", { type: "button", class: "btn btn-line", onclick: () => { addRow().focus(); sync(); } }, icon("plus", true), t("upload_dirs_add"))),
+        cfg.bot_installed ? h("div", {},
+          h("div", { class: "sec-title" }, t("muse_dir_label")),
+          h("p", { class: "explain" }, t("muse_dir_explain")),
+          h("div", { class: "dir-row" }, muse),
+          h("div", { class: "hint data", style: "margin-top:6px;font-size:12px;color:var(--ink-3)" }, t("muse_dir_default", { path: museDefault })),
+          outside) : null,
+        msg),
+      h("div", { class: "modal-foot" }, h("button", { type: "button", class: "btn btn-line", onclick: close }, t("cancel")), save));
+    sync();
+    return h("div", {}, modalHead(t("upload_title"), t("upload_sub", { path: cfg.env_file }), close), form);
+  }, { wide: true });
+}
 async function openMcpGuide() {
   let setup;
   try { setup = await api("GET", `/mcp/setup?base_url=${enc(location.origin)}`); }
@@ -1172,10 +1309,75 @@ function showLogin() {
   $("app").classList.add("hidden"); $("viewer").classList.add("hidden"); $("login").classList.remove("hidden");
   $("token").focus();
 }
+// ---- Muse2Tele: thong bao + cap nhat ----
+let updateInfo = null, updateDismissed = false, updateTimer = null;
+const shortDate = (iso) => (iso ? iso.slice(8, 10) + "/" + iso.slice(5, 7) + "/" + iso.slice(0, 4) : "?");
+const recent = (iso, s) => iso && Date.now() - new Date(iso).getTime() < s * 1000;
+async function loadUpdate(force = false) {
+  try { updateInfo = await api("GET", "/update" + (force ? "?force=true" : "")); }
+  catch { return null; }
+  $("update-btn").classList.toggle("hidden", !updateInfo.supported);
+  drawUpdate();
+  clearTimeout(updateTimer);
+  updateTimer = setTimeout(() => loadUpdate(), updateInfo.busy ? 3000 : 6 * 3600 * 1000);
+  return updateInfo;
+}
+function drawUpdate() {
+  const slot = $("update-slot"), u = updateInfo;
+  slot.replaceChildren();
+  if (!u || !u.supported) return;
+  const last = u.last_update || {};
+  if (u.busy) return slot.append(h("div", { class: "upd" }, h("div", { class: "grow2" }, h("b", {}, t("update_busy", { m: last.message || "" })))));
+  if (u.available) {
+    const r = u.remote || {};
+    return slot.append(h("div", { class: "upd new" }, icon("download", true),
+      h("div", { class: "grow2" }, h("b", {}, t("update_available")), h("span", { class: "sub" }, `${shortDate(r.date)} · ${r.message || ""}`)),
+      h("button", { class: "btn btn-act", onclick: openUpdate }, t("update_open"))));
+  }
+  if (updateDismissed || !recent(last.at, 3600) || !["done", "error"].includes(last.state)) return;
+  const ok = last.state === "done";
+  slot.append(h("div", { class: "upd " + (ok ? "ok" : "bad") }, icon(ok ? "check" : "alert", true),
+    h("div", { class: "grow2" }, h("b", {}, t(ok ? "update_done" : "update_failed", { m: last.message || "" }))),
+    h("button", { class: "icon-btn", title: t("dismiss"), "aria-label": t("dismiss"), onclick: () => { updateDismissed = true; drawUpdate(); } }, icon("x"))));
+}
+function openUpdate() {
+  const u = updateInfo || {}, r = u.remote || {};
+  const changes = (u.changes && u.changes.length ? u.changes : (r.message ? [r.message] : []));
+  modal((close) => {
+    const msg = h("div", { class: "msg", role: "status" });
+    const go = h("button", { class: "btn btn-act", type: "button", onclick: async () => {
+      go.disabled = true; msg.className = "msg"; msg.textContent = "";
+      try {
+        await api("POST", "/update/apply");
+        close(); toast(t("update_started"));
+        updateInfo = { ...u, busy: true, available: false, last_update: { message: t("update_started") } };
+        drawUpdate(); setTimeout(() => loadUpdate(), 3000);
+      } catch (e) { msg.className = "msg err"; msg.textContent = e.message; go.disabled = false; }
+    } }, icon("download", true), t("update_now"));
+    const noteLine = (ic, text, calm) => h("div", { class: "note" + (calm ? " calm" : "") }, icon(ic, true), h("span", {}, text));
+    return h("div", {},
+      modalHead(t("update_title"), t("update_versions", { local: (u.local_sha || "").slice(0, 7) || t("update_unknown"), remote: (r.sha || "").slice(0, 7), date: shortDate(r.date) }), close),
+      h("div", { class: "modal-body" },
+        h("div", { class: "sec-title" }, t("update_changes")),
+        changes.length ? h("ul", { class: "upd-list" }, changes.map((c) => h("li", {}, c))) : h("p", { class: "explain" }, t("update_no_changes")),
+        u.note ? h("p", { class: "explain" }, u.note) : null,
+        noteLine("check", t("update_keep"), true), noteLine("reload", t("update_restart")), noteLine("folder", t("update_backup"), true), msg),
+      h("div", { class: "modal-foot" }, h("button", { type: "button", class: "btn btn-line", onclick: close }, t("cancel")), go));
+  });
+}
+async function checkUpdateNow() {
+  toast(t("update_checking"));
+  const u = await loadUpdate(true);
+  if (!u) return;
+  if (u.available) openUpdate();
+  else toast(u.error ? t("update_check_error", { e: u.error }) : t("update_latest"), !!u.error);
+}
+
 async function showApp(authRequired) {
   $("login").classList.add("hidden"); $("app").classList.remove("hidden");
   $("logout-btn").classList.toggle("hidden", !authRequired);
   await refresh();
+  loadUpdate();
   if (!listTimer) listTimer = setInterval(() => { if (!viewing && !document.hidden) refresh(); }, 4000);
 }
 $("login-form").onsubmit = async (e) => {
@@ -1187,9 +1389,11 @@ $("login-form").onsubmit = async (e) => {
 $("logout-btn").onclick = () => { token = ""; store.set("foxprofile.token", null); showLogin(); };
 $("new-btn").onclick = () => openEditor(null);
 $("settings-btn").onclick = openSettings;
+$("upload-btn").onclick = openUploadDirs;
+$("update-btn").onclick = checkUpdateNow;
 $("mcp-btn").onclick = openMcpGuide;
 $("search").oninput = render;
-document.querySelectorAll("[data-lang]").forEach((b) => { b.onclick = () => { lang = b.dataset.lang; store.set("foxprofile.lang", lang); applyI18n(); lastRender = ""; render(); }; });
+document.querySelectorAll("[data-lang]").forEach((b) => { b.onclick = () => { lang = b.dataset.lang; store.set("foxprofile.lang", lang); applyI18n(); lastRender = ""; render(); drawUpdate(); }; });
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     if (!$("viewer").classList.contains("hidden")) { closeViewer(); return; }

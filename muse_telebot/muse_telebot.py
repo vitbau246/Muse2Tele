@@ -9,6 +9,9 @@ Bot Telegram <-> muse.ai qua FoxProfile.
   - Muse -> Telegram: bot doc tra loi cua Muse tren trang (chu + anh/video/file) va gui ve topic (relay ngay sau khi
     gui tin; watch moi WATCH_INTERVAL giay cho tin Muse tu viet / go tren web). Dong "[[nút: A | B]]" cuoi tin thanh
     nut bam; bam nut thi lua chon duoc gui lai vao Muse.
+  - /reset (chu bot): bam nut xac nhan -> xoa toan bo du lieu Muse cua profile (Settings -> Data controls -> Reset
+    <ten agent>, bot tu doc ten agent), xoa topic cu, tao topic moi cung ten, dat ten agent = ten profile.
+  - Ten agent: agent con ten mac dinh "Muse" thi khi tao topic / /gan bot gui "Change your name to <profile>".
   - Khoi dong / /start: bot kiem tra tung buoc cau hinh va huong dan nguoi dung; canh bao profile dung IP Viet Nam.
 
 Trang thai (muse_telebot_state.json, bot tu tao):
@@ -32,6 +35,7 @@ import subprocess
 import sys
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from types import SimpleNamespace
@@ -68,6 +72,7 @@ RELAY_START_GRACE = 30
 RELAY_MAX_SECONDS = 2 * 3600
 RELAY_MAX_ERRORS = 15
 WATCH_INTERVAL = 5
+WATCH_WORKERS = 4
 WATCH_RETRY_SECONDS = 60
 DELIVERED_KEEP = 200
 MEDIA_RELOAD_SECONDS = 20
@@ -75,11 +80,14 @@ MEDIA_RELOAD_GAP = 90
 MEDIA_MISSING_WAIT = 240
 TOPICS_CHECK_SECONDS = 30  # quet profile moi dang nhap Muse
 IP_CHECK_SECONDS = 6 * 3600  # kiem tra lai IP cac profile
+UPDATE_CHECK_SECONDS = 6 * 3600  # hoi FoxProfile co ban Muse2Tele moi tren GitHub khong
 STALL_RETRY_SECONDS = 60
 STALL_GIVE_UP_SECONDS = 30 * 60
 WATCH_HANG_SECONDS = 180
 MUSE_DOWN_TEXT = "⏳ Muse đang gặp lỗi, bot sẽ tự gửi lại tin này khi Muse hoạt động trở lại."
 CHOSEN_DATA = "muse_bridge_chosen"
+RESET_DATA = "muse_reset:"  # + "go:<profile>" / "no"
+LINK_DATA = "muse_link:"  # + "<profile>" / "" (huy): nut chon profile cua /gan
 BUTTONS_RE = re.compile(r"\[\[\s*(?:nút|nut|buttons?)\s*:\s*(.+?)\s*\]\]", re.IGNORECASE | re.DOTALL)
 KIND_LABEL = {"image": "ảnh", "video": "video"}
 VN_WARNING = ("🚫 <b>CẢNH BÁO: profile <code>{profile}</code> đang vào Muse bằng IP Việt Nam</b> ({ip}, {country}).\n"
@@ -100,6 +108,8 @@ for _handler in _root.handlers:
 
 bot = telebot.TeleBot(TOKEN, parse_mode=None, threaded=False) if TOKEN else None
 jobs = queue.Queue()
+profile_queues = {}
+profile_queues_lock = threading.Lock()
 relays = {}
 relay_lock = threading.Lock()
 state_lock = threading.Lock()
@@ -349,16 +359,33 @@ def run_stalled(key):
         return
 
 
+def profile_queue_for(key):
+    with profile_queues_lock:
+        work = profile_queues.get(key)
+        if work is None:
+            work = profile_queues[key] = queue.Queue()
+            threading.Thread(target=profile_worker, args=(work,), daemon=True).start()
+        return work
+
+
 def worker():
-    """Xu ly hang doi theo dung thu tu; gom cac phan cua 1 album thanh 1 tin."""
+    """Phan phoi cong viec toi hang doi rieng cua tung profile."""
+    while True:
+        job = jobs.get()
+        key = job["key"] if job["kind"] == "stalled" else job["chat"]["key"]
+        profile_queue_for(key).put(job)
+
+
+def profile_worker(work):
+    """Xu ly tuan tu cong viec cua mot profile; gom cac phan cua album thanh mot tin."""
     pending = None
     while True:
-        job, pending = pending or jobs.get(), None
+        job, pending = pending or work.get(), None
         batch = [job]
         group = job["m"].media_group_id if job["kind"] == "msg" else None
         while group:
             try:
-                nxt = jobs.get(timeout=ALBUM_WAIT_SECONDS)
+                nxt = work.get(timeout=ALBUM_WAIT_SECONDS)
             except queue.Empty:
                 break
             if nxt["kind"] == "msg" and nxt["m"].media_group_id == group and nxt["m"].chat.id == job["m"].chat.id:
@@ -369,6 +396,10 @@ def worker():
         try:
             if job["kind"] == "stalled":
                 run_stalled(job["key"])
+            elif job["kind"] == "reset":
+                run_reset(job)
+            elif job["kind"] == "name":
+                name_agent(job["profile"], job["topic"])
             elif job["kind"] == "ask":
                 seen = set()
                 ok, result = muse_sync.send(job["chat"], job["text"], seen=seen)
@@ -592,7 +623,7 @@ def deliver_new(fox, chat, r, target, busy):
             send_reply(fox, msg, target, chat["key"], chat)
         except Exception as e:
             if "thread not found" in str(e).lower():  # nguoi dung da xoa topic: bo map, bot se tao topic moi
-                forget_topic(chat["profile"])
+                forget_topic(chat["profile"], int(chat["tg"].rpartition("/")[2]))
                 return False
             logger.exception(f"Khong chuyen duoc tin {msg['id']} ve Telegram")
     return False
@@ -665,15 +696,15 @@ def tg_target(tg):
 def watch_chat(chat, r, tabs):
     profile = chat["profile"]
     fox = muse_sync.FoxProfileBrowser(profile, log=logger.info)
-    if profile not in tabs:
-        tabs[profile] = [t["url"] for t in fox.tabs()] if fox.profile_exists() and fox.is_running() else None
-    if tabs[profile] is None:  # profile dang tat: khong tu mo; mo lai thi vong sau gui bu
-        return
-    if not any(muse_sync.same_url(u, chat["url"]) for u in tabs[profile]):
-        with muse_sync.lock:
+    with muse_sync.lock_for(profile):
+        if profile not in tabs:
+            tabs[profile] = [t["url"] for t in fox.tabs()] if fox.profile_exists() and fox.is_running() else None
+        if tabs[profile] is None:  # profile dang tat: khong tu mo; mo lai thi vong sau gui bu
+            return
+        if not any(muse_sync.same_url(u, chat["url"]) for u in tabs[profile]):
             fox.open_tab(chat["url"])
-        tabs[profile].append(chat["url"])
-    fox.tab = chat["url"]
+            tabs[profile].append(chat["url"])
+        fox.tab = chat["url"]
     if chat["key"] not in load_state().get("watched", []):  # topic moi: tin dang co coi nhu da chuyen
         ids = [m["id"] for m in muse_sync.messages(fox) if m["role"] == "assistant"]
 
@@ -690,38 +721,48 @@ def watch_chat(chat, r, tabs):
 
 
 def watch_loop():
-    runs, errors, hung = {}, {}, {}
-    while True:
-        time.sleep(WATCH_INTERVAL)
-        if not group_id():
-            continue
-        chats = mapped_chats()
-        keys = {c["key"] for c in chats}
-        if any(k not in keys for k in load_state().get("watched", [])):
-            update_state(lambda state: state.__setitem__("watched", [k for k in state["watched"] if k in keys]))
-        tabs = {}
-        for chat in chats:
-            with relay_lock:
-                if chat["key"] in relays:
+    runs, errors, hung, active = {}, {}, {}, {}
+    with ThreadPoolExecutor(max_workers=WATCH_WORKERS, thread_name_prefix="muse-watch") as pool:
+        while True:
+            time.sleep(WATCH_INTERVAL)
+            for key, (chat, future) in list(active.items()):
+                if not future.done():
                     continue
-            r = runs.setdefault(chat["key"], {"seen": set(), "waiting": {}, "reloaded": 0, "retry": 0})
-            if time.time() < r["retry"]:
+                active.pop(key)
+                r = runs[key]
+                try:
+                    future.result()
+                    errors.pop(key, None)
+                    hung.pop(chat["profile"], None)
+                except Exception as e:
+                    r["retry"] = time.time() + WATCH_RETRY_SECONDS
+                    error = f"{type(e).__name__}: {e}"
+                    if errors.get(key) != error:
+                        logger.warning(f"Theo doi {key}: {error}")
+                    errors[key] = error
+                    if is_hang(e):
+                        since = hung.setdefault(chat["profile"], time.time())
+                        if time.time() - since >= WATCH_HANG_SECONDS and muse_sync.can_restart(chat["profile"]):
+                            hung.pop(chat["profile"], None)
+                            recover(chat["profile"], error)
+
+            if not group_id():
                 continue
-            try:
-                watch_chat(chat, r, tabs)
-                errors.pop(chat["key"], None)
-                hung.pop(chat["profile"], None)
-            except Exception as e:
-                r["retry"] = time.time() + WATCH_RETRY_SECONDS
-                error = f"{type(e).__name__}: {e}"
-                if errors.get(chat["key"]) != error:
-                    logger.warning(f"Theo doi {chat['key']}: {error}")
-                errors[chat["key"]] = error
-                if is_hang(e):
-                    since = hung.setdefault(chat["profile"], time.time())
-                    if time.time() - since >= WATCH_HANG_SECONDS and muse_sync.can_restart(chat["profile"]):
-                        hung.pop(chat["profile"], None)
-                        recover(chat["profile"], error)
+            chats = mapped_chats()
+            keys = {c["key"] for c in chats}
+            if any(k not in keys for k in load_state().get("watched", [])):
+                update_state(lambda state: state.__setitem__("watched", [k for k in state["watched"] if k in keys]))
+            for chat in chats:
+                key = chat["key"]
+                with relay_lock:
+                    if key in relays:
+                        continue
+                if key in active:
+                    continue
+                r = runs.setdefault(key, {"seen": set(), "waiting": {}, "reloaded": 0, "retry": 0})
+                if time.time() < r["retry"]:
+                    continue
+                active[key] = (chat, pool.submit(watch_chat, chat, r, {}))
 
 
 def is_hang(e):
@@ -731,7 +772,7 @@ def is_hang(e):
 
 def recover(profile, why):
     try:
-        with muse_sync.lock:
+        with muse_sync.lock_for(profile):
             muse_sync.restart_profile(profile, why)
         notify(f"🔄 Trình duyệt của profile {profile} bị treo, bot đã tự khởi động lại.")
     except Exception as e:
@@ -741,12 +782,229 @@ def recover(profile, why):
 
 # ---------- tu tao topic cho profile + canh bao IP Viet Nam ----------
 
-def forget_topic(profile):
+def forget_topic(profile, topic=None):
+    """Bo map profile -> topic. topic: chi bo neu profile van map voi topic nay (luong cu gui vao topic da bi thay
+    sau khi reset thi khong duoc xoa map topic moi)."""
     def drop(state):
-        (state.get("topics") or {}).pop(profile, None)
+        mapped = (state.get("topics") or {}).get(profile)
+        if mapped is None or (topic is not None and int(mapped) != topic):
+            return False
+        state["topics"].pop(profile)
         state["watched"] = [k for k in state.get("watched", []) if k != profile]
-    update_state(drop)
-    logger.info(f"Topic cua {profile} khong con, se tao lai")
+        return True
+    if update_state(drop):
+        logger.info(f"Topic cua {profile} khong con, se tao lai")
+
+
+# ---------- gan topic <-> profile thu cong (/gan) ----------
+
+def topic_name(m):
+    """Ten topic chua tin m (lay tu tin he thong "tao topic" ma Telegram gan vao reply_to_message), None neu khong
+    biet (tin la reply 1 tin khac, hoac topic da doi ten sau khi tao)."""
+    ref = getattr(m, "reply_to_message", None)
+    created = getattr(ref, "forum_topic_created", None) if ref else None
+    return created.name if created else None
+
+
+def link_topic(profile, topic):
+    """Gan topic cho profile: bo map cu cua profile va cua topic (1 profile - 1 topic). Tin Muse dang co coi nhu da
+    chuyen (watch_chat bat dau lai). Tra ve (topic cu cua profile, profile cu cua topic)."""
+    def change(state):
+        mapped = state.setdefault("topics", {})
+        old_topic = mapped.get(profile)
+        old_profile = next((p for p, t in mapped.items() if int(t) == topic and p != profile), None)
+        if old_profile:
+            mapped.pop(old_profile)
+        mapped[profile] = topic
+        state["watched"] = [k for k in state.get("watched", []) if k not in (profile, old_profile)]
+        return old_topic, old_profile
+    old = update_state(change)
+    logger.info(f"Gan thu cong {profile} -> topic {topic} (topic cu {old[0]}, profile cu cua topic {old[1]})")
+    return old
+
+
+def do_link(chat_id, topic, profile):
+    old_topic, old_profile = link_topic(profile, topic)
+    p = html.escape(profile)
+    notes = []
+    if old_topic and old_topic != topic:
+        notes.append(f"Topic cũ của {p} không còn nhận tin của Muse.")
+    if old_profile:
+        notes.append(f"Topic này không còn gắn với profile {html.escape(old_profile)}; bot sẽ tạo topic mới cho "
+                     f"{html.escape(old_profile)} khi profile đó mở và đăng nhập Muse.")
+    bot.send_message(chat_id, f"🔗 <b>Đã gán topic này với profile {p}.</b>\nNhắn tin vào đây để làm việc với Muse của "
+                              f"profile {p}." + ("\n" + "\n".join(notes) if notes else ""),
+                     parse_mode="HTML", message_thread_id=topic)
+    threading.Thread(target=check_ip, args=(profile, topic), daemon=True).start()
+    queue_name_agent(profile, topic)
+
+
+def choose_profile(m, topic, profiles, why):
+    mapped = topics()
+    kb = types.InlineKeyboardMarkup(row_width=2)
+    buttons = []
+    for p in profiles:
+        if len(f"{LINK_DATA}{p}".encode()) > 64:  # gioi han callback_data
+            continue
+        mark = "✅ " if mapped.get(p) == topic else "🔗 " if p in mapped else ""
+        buttons.append(types.InlineKeyboardButton(f"{mark}{p}", callback_data=f"{LINK_DATA}{p}"))
+    kb.add(*buttons)
+    kb.add(types.InlineKeyboardButton("Huỷ", callback_data=LINK_DATA))
+    bot.send_message(m.chat.id, f"{why}\nChọn profile để gán với topic này:\n<i>✅ đang gán với topic này · 🔗 đã có "
+                                f"topic khác (chọn thì chuyển sang topic này)</i>",
+                     parse_mode="HTML", reply_markup=kb, message_thread_id=topic)
+
+
+def on_link_button(c):
+    m = c.message
+    if not is_admin(c.from_user):
+        bot.answer_callback_query(c.id, "Chỉ chủ bot mới gán được topic.")
+        return
+    try:
+        bot.edit_message_reply_markup(m.chat.id, m.message_id, reply_markup=None)
+    except Exception:
+        logger.debug("Khong go duoc nut gan topic", exc_info=True)
+    profile, topic = c.data[len(LINK_DATA):], topic_of(m)
+    if not profile:
+        bot.answer_callback_query(c.id, "Đã huỷ.")
+        return
+    if m.chat.id != group_id() or topic is None:
+        bot.answer_callback_query(c.id, "Nhóm này không còn gắn với bot.")
+        return
+    if profile not in muse_sync.fox_profiles():
+        bot.answer_callback_query(c.id, f"Profile {profile} không còn trong FoxProfile.")
+        return
+    bot.answer_callback_query(c.id, f"Đã gán {profile}")
+    do_link(m.chat.id, topic, profile)
+
+
+# ---------- reset Muse cua 1 profile ----------
+
+def ask_reset(m, profile):
+    """Buoc 1: canh bao + nut Tiep tuc / Huy."""
+    data = f"{RESET_DATA}go:{profile}"
+    if len(data.encode()) > 64:  # gioi han callback_data cua Telegram
+        bot.reply_to(m, "Tên profile quá dài, bot không tạo được nút xác nhận. Đổi tên profile ngắn hơn rồi thử lại.")
+        return
+    kb = types.InlineKeyboardMarkup()
+    kb.add(types.InlineKeyboardButton(f"🗑 Xoá Muse của {profile}", callback_data=data),
+           types.InlineKeyboardButton("Huỷ", callback_data=f"{RESET_DATA}no"))
+    p = html.escape(profile)
+    bot.send_message(m.chat.id, f"⚠️ <b>Reset Muse của profile {p}?</b>\n\nThao tác này <b>xoá vĩnh viễn toàn bộ dữ liệu "
+                                f"Muse</b> của profile: lịch sử chat, file, artifact và các task đang chạy. Toàn bộ tin "
+                                f"nhắn trong topic <b>{p}</b> cũng bị xoá (bot tạo lại topic mới cùng tên). Xong bot đặt "
+                                f"tên agent Muse là <b>{p}</b>.\n\n<b>Không thể hoàn tác.</b>",
+                     parse_mode="HTML", reply_markup=kb, message_thread_id=topic_of(m))
+
+
+def on_reset_button(c):
+    """Buoc 2: bam nut xac nhan -> xep viec reset vao hang doi cua profile (bot tu doc ten agent tren Muse)."""
+    m = c.message
+    if not is_admin(c.from_user):
+        bot.answer_callback_query(c.id, "Chỉ chủ bot mới reset được Muse.")
+        return
+    try:
+        bot.edit_message_reply_markup(m.chat.id, m.message_id, reply_markup=None)
+    except Exception:
+        logger.debug("Khong go duoc nut reset", exc_info=True)
+    action = c.data[len(RESET_DATA):]
+    if action == "no":
+        bot.answer_callback_query(c.id, "Đã huỷ.")
+        bot.send_message(m.chat.id, "Đã huỷ reset.", message_thread_id=topic_of(m))
+        return
+    profile = action.removeprefix("go:")
+    if profile not in muse_sync.fox_profiles():
+        bot.answer_callback_query(c.id, f"Profile {profile} không còn trong FoxProfile.")
+        return
+    bot.answer_callback_query(c.id, f"Đang reset Muse của {profile}...")
+    bot.send_message(m.chat.id, f"⏳ Đang reset Muse của profile {html.escape(profile)}... (có thể mất vài phút)",
+                     parse_mode="HTML", message_thread_id=topic_of(m))
+    jobs.put({"kind": "reset", "m": m, "chat": {"key": profile, "profile": profile}, "profile": profile})
+
+
+def name_agent(profile, topic, only_default=True):
+    """Dat ten agent Muse = ten profile ("Change your name to <profile>"), tra loi cua Muse chuyen vao topic.
+    only_default: chi doi khi agent dang mang ten mac dinh (khong ro la agent cua profile nao). Chay trong hang doi
+    cua profile (giu thu tu voi tin khac)."""
+    try:
+        name = muse_sync.agent_name(profile) if only_default else None
+    except Exception as e:
+        logger.warning(f"Khong doc duoc ten agent {profile}: {type(e).__name__}: {e}")
+        return
+    if only_default and (name is None or name.casefold() != muse_sync.DEFAULT_AGENT_NAME.casefold()
+                         or name == profile):
+        logger.info(f"Ten agent {profile}: {name!r} -- khong doi")
+        return
+    chat = chat_of(profile, topic) if topic else {"profile": profile, "url": muse_sync.MUSE_URL, "key": profile}
+    seen = set()
+    ok, result = muse_sync.send(chat, muse_sync.rename_agent_text(profile), seen=seen)
+    logger.info(f"Doi ten agent {profile} ({name!r} -> {profile}): {result}")
+    if ok and topic:
+        relay(chat, tg_target(chat["tg"]), seen)
+
+
+def queue_name_agent(profile, topic):
+    """Xep viec dat ten agent (neu dang ten mac dinh) vao hang doi cua profile."""
+    jobs.put({"kind": "name", "chat": {"key": profile, "profile": profile}, "profile": profile, "topic": topic})
+
+
+def run_reset(job):
+    """Reset Muse tren web (muse_sync.reset_muse), xong thi xoa topic cu, tao topic moi cung ten va dat ten agent =
+    ten profile."""
+    profile, m = job["profile"], job["m"]
+    try:
+        ok, result = muse_sync.reset_muse(profile)
+    except Exception as e:
+        ok, result = False, f"lỗi {type(e).__name__}: {e}"
+    logger.warning(f"Reset Muse {profile}: ok={ok} {result}")
+    if not ok:
+        react(m, "👎")
+        safe_reply(m, f"❌ Chưa reset Muse của profile {profile}: {result}")
+        return
+    with stalled_lock:  # tin cu dang cho gui lai: Muse da xoa sach, khong gui nua
+        stalled.pop(profile, None)
+    old = topics().get(profile)
+    new, note = reset_topic(profile)
+    text = f"✅ {result}\n{note}"
+    if m.chat.id == group_id() and topic_of(m) == old and new != old:  # tin yeu cau nam trong topic da xoa
+        notify(f"✅ Reset Muse của profile {profile}: {result}\n{note}")
+    else:
+        react(m, "👌")
+        safe_reply(m, text)
+    name_agent(profile, new, only_default=False)  # vua reset: agent ve ten mac dinh, dat luon ten profile
+
+
+def reset_topic(profile):
+    """Xoa topic cua profile (xoa het tin trong do) va tao topic moi cung ten. Tra ve (topic moi, ghi chu)."""
+    def clear_delivered(state):  # Muse da reset: tin moi cua Muse (ke ca loi chao) se duoc chuyen vao topic moi
+        state.setdefault("delivered", {})[profile] = []
+    group, old = group_id(), topics().get(profile)
+    if not group or old is None:
+        update_state(clear_delivered)
+        return None, "Profile này chưa có topic trong nhóm."
+    try:
+        bot.delete_forum_topic(group, old)
+    except ApiTelegramException as e:
+        update_state(clear_delivered)
+        logger.warning(f"Khong xoa duoc topic {old} cua {profile}: {e}")
+        return old, (f"⚠️ Bot không xoá được tin nhắn trong topic ({e.description}). Cấp cho bot quyền "
+                     f"Xoá tin nhắn (Delete messages) trong nhóm, hoặc tự xoá topic: bot sẽ tạo lại topic mới.")
+    try:
+        new = bot.create_forum_topic(group, profile[:128]).message_thread_id
+    except Exception as e:
+        logger.warning(f"Da xoa topic {old} nhung khong tao duoc topic moi cho {profile}: {e}")
+        forget_topic(profile, old)  # sync_topics se tao lai
+        return None, "Đã xoá topic cũ. Bot sẽ tự tạo lại topic trong vài phút."
+
+    def swap(state):
+        state.setdefault("topics", {})[profile] = new
+        clear_delivered(state)
+    update_state(swap)
+    logger.info(f"Reset {profile}: topic {old} -> {new}")
+    bot.send_message(group, f"♻️ <b>Muse của profile {html.escape(profile)} đã được reset.</b>\nDữ liệu Muse và tin nhắn "
+                            f"cũ trong topic đã được xoá. Nhắn tin vào topic này để bắt đầu lại.",
+                     parse_mode="HTML", message_thread_id=new)
+    return new, "Đã xoá topic cũ (cùng toàn bộ tin nhắn) và tạo topic mới cùng tên."
 
 
 def check_ip(profile, topic=None, force=False):
@@ -800,10 +1058,32 @@ def sync_topics():
                                 f"Câu trả lời của Muse (kể cả khi bạn gõ trên web) sẽ hiện ở đây.",
                          parse_mode="HTML", message_thread_id=topic)
         check_ip(profile, topic, force=True)
+        queue_name_agent(profile, topic)
+
+
+def check_update():
+    """Bao chu bot 1 lan cho moi ban moi tren GitHub (FoxProfile kiem tra, xem GET /api/v1/update)."""
+    try:
+        info = muse_sync.FoxProfileBrowser("", log=logger.debug)._call("GET", "/update", timeout=60).json()
+    except Exception as e:
+        logger.debug(f"Kiem tra cap nhat loi: {e}")
+        return
+    remote = info.get("remote") or {}
+    sha = remote.get("sha")
+    if not info.get("available") or not sha or info.get("busy"):
+        return
+    if not update_state(lambda s: s.get("update_notified") != sha and s.update(update_notified=sha) is None):
+        return
+    changes = info.get("changes") or [remote.get("message", "")]
+    lines = "\n".join(f"• {html.escape(c)}" for c in changes[:10] if c)
+    notify(f"🆕 <b>Đã có phiên bản mới của Muse2Tele</b> ({html.escape(remote.get('date', '')[:10])})\n{lines}\n\n"
+           f"Mở dashboard FoxProfile và bấm <b>Xem thay đổi &amp; cập nhật</b>. Dữ liệu (profile, .env, video, "
+           f"cài đặt) được giữ nguyên; FoxProfile, bot và AutoPost sẽ tự khởi động lại.", parse_mode="HTML")
 
 
 def topics_loop():
     last_ip = 0
+    last_update = time.time() - UPDATE_CHECK_SECONDS + 120  # lan dau: 2 phut sau khi bot chay
     while True:
         try:
             sync_topics()
@@ -813,6 +1093,9 @@ def topics_loop():
             last_ip = time.time()
             for profile, topic in topics().items():
                 check_ip(profile, topic)
+        if time.time() - last_update >= UPDATE_CHECK_SECONDS:
+            last_update = time.time()
+            check_update()
         time.sleep(TOPICS_CHECK_SECONDS)
 
 
@@ -876,8 +1159,7 @@ def status_text():
     if vn:
         lines += ["", "🚫 <b>Profile đang dùng IP Việt Nam:</b> " + html.escape(", ".join(vn)),
                   "Gắn proxy nước ngoài cho các profile này trong FoxProfile để tránh bị Muse chặn."]
-    lines += ["", "Lệnh: /start xem trạng thái · /kiemtra kiểm tra IP các profile · /allow_on, /allow_off bật/tắt "
-                  "tự bấm Allow trên Muse"]
+    lines += ["", "<b>Lệnh:</b> " + commands_help()]
     return "\n".join(lines)
 
 
@@ -898,15 +1180,55 @@ def startup_report():
 
 # ---------- bot ----------
 
+# Moi lenh cua bot: (lenh, mo ta trong menu "/" cua Telegram, noi dung: "private" / "group" / "both").
+# Bot tu khai bao voi Telegram luc khoi dong (set_commands) -> khong can /setcommands o BotFather.
+COMMANDS = [
+    ("start", "Xem trạng thái cấu hình và việc cần làm tiếp", "private"),
+    ("help", "Hướng dẫn sử dụng (giống /start)", "private"),
+    ("setup", "Gắn nhóm này với bot (gõ trong nhóm đã bật Chủ đề)", "group"),
+    ("gan", "Gõ trong topic: gán topic với profile (trùng tên thì gán luôn, không thì chọn)", "group"),
+    ("kiemtra", "Kiểm tra IP từng profile, cảnh báo IP Việt Nam", "both"),
+    ("reset", "Xoá toàn bộ dữ liệu Muse của 1 profile và topic của nó (có nút xác nhận)", "both"),
+    ("allow_on", "Bật tự bấm Allow khi Muse xin quyền", "both"),
+    ("allow_off", "Tắt tự bấm Allow khi Muse xin quyền", "both"),
+]
+# Khung "What can this bot do?" (chat rieng trong, toi da 512 ky tu) va mo ta ngan o trang thong tin bot (toi da 120).
+BOT_DESCRIPTION = ("Muse2tele nối các tài khoản Muse (muse.ai) với một nhóm Telegram: mỗi profile FoxProfile có một "
+                   "topic riêng. Nhắn tin, gửi ảnh / video / file vào topic, bot gõ vào Muse và gửi câu trả lời của "
+                   "Muse về đúng topic đó.\n\nBấm Start để nhận quyền chủ bot và xem hướng dẫn cấu hình.")
+BOT_SHORT_DESCRIPTION = "Dùng Muse (muse.ai) ngay trong nhóm Telegram: mỗi tài khoản Muse một topic."
+
+
+def commands_help():
+    """Dong liet ke lenh cho /start."""
+    return " · ".join(f"/{name} {html.escape(desc[0].lower() + desc[1:])}" for name, desc, _ in COMMANDS
+                      if name != "help")
+
+
 def set_commands():
-    try:
-        bot.set_my_commands([types.BotCommand("start", "Xem trạng thái và hướng dẫn cấu hình"),
-                             types.BotCommand("setup", "Gõ trong nhóm để gắn nhóm với bot"),
-                             types.BotCommand("kiemtra", "Kiểm tra IP các profile"),
-                             types.BotCommand("allow_on", "Bật tự bấm Allow trên Muse"),
-                             types.BotCommand("allow_off", "Tắt tự bấm Allow trên Muse")])
-    except Exception:
-        logger.exception("Khong dat duoc danh sach lenh")
+    """Khai bao menu lenh (rieng cho chat rieng / nhom) va phan gioi thieu bot. Chi goi API khi noi dung khac
+    cai Telegram dang luu (cac lenh set nay bi gioi han tan suat)."""
+    menus = [(types.BotCommandScopeDefault(), ("private", "group", "both")),
+             (types.BotCommandScopeAllPrivateChats(), ("private", "both")),
+             (types.BotCommandScopeAllGroupChats(), ("group", "both"))]
+    for scope, where in menus:
+        want = [(name, desc) for name, desc, w in COMMANDS if w in where]
+        try:
+            have = [(c.command, c.description) for c in bot.get_my_commands(scope=scope) or []]
+            if have != want:
+                bot.set_my_commands([types.BotCommand(n, d) for n, d in want], scope=scope)
+                logger.info(f"Da cap nhat menu lenh ({scope.type}): {len(want)} lenh")
+        except Exception:
+            logger.exception(f"Khong dat duoc menu lenh ({scope.type})")
+    for get, put, attr, text in ((bot.get_my_description, bot.set_my_description, "description", BOT_DESCRIPTION),
+                                 (bot.get_my_short_description, bot.set_my_short_description, "short_description",
+                                  BOT_SHORT_DESCRIPTION)):
+        try:
+            if getattr(get(), attr, None) != text:
+                put(**{attr: text})
+                logger.info(f"Da cap nhat {attr} cua bot")
+        except Exception:
+            logger.exception(f"Khong dat duoc {attr} cua bot")
 
 
 def register_handlers():
@@ -979,6 +1301,53 @@ def register_handlers():
         muse_auto.set_enabled(m.text.split()[0].split("@")[0] == "/allow_on")
         bot.reply_to(m, f"Tự bấm Allow trên Muse: {'BẬT' if muse_auto.enabled() else 'TẮT'}")
 
+    @bot.message_handler(commands=["reset"])
+    def _reset(m):
+        if not is_admin(m.from_user):
+            bot.reply_to(m, "Chỉ chủ bot mới reset được Muse.")
+            return
+        chat = target_for(m)
+        arg = m.text.partition(" ")[2].strip()
+        profile = chat["profile"] if chat else next((p for p in muse_sync.fox_profiles()
+                                                     if p.casefold() == arg.casefold()), None) if arg else None
+        if profile:
+            ask_reset(m, profile)
+            return
+        names = ", ".join(muse_sync.fox_profiles()) or "—"
+        bot.reply_to(m, ("Không có profile tên " + html.escape(arg) + ". " if arg else "")
+                     + "Gõ /reset trong <b>topic của profile</b> cần reset, hoặc <code>/reset tên_profile</code>.\n"
+                       f"Các profile: {html.escape(names)}", parse_mode="HTML")
+
+    @bot.message_handler(commands=["gan"])
+    def _gan(m):
+        if not is_admin(m.from_user):
+            bot.reply_to(m, "Chỉ chủ bot mới gán được topic.")
+            return
+        if m.chat.type not in ("group", "supergroup"):
+            bot.reply_to(m, "Gõ /gan <b>trong topic</b> của nhóm mà bạn muốn gán với một profile.", parse_mode="HTML")
+            return
+        if m.chat.id != group_id():
+            bot.reply_to(m, "Nhóm này chưa gắn với bot. Gõ /setup trước.")
+            return
+        topic = topic_of(m)
+        if topic is None:
+            bot.reply_to(m, "Hãy gõ /gan trong một <b>topic</b> (không phải mục General).", parse_mode="HTML")
+            return
+        profiles = muse_sync.fox_profiles()
+        if not profiles:
+            bot.reply_to(m, "FoxProfile chưa có profile nào.")
+            return
+        arg = m.text.partition(" ")[2].strip()
+        name = arg or topic_name(m)
+        match = next((p for p in profiles if name and p.casefold() == name.casefold()), None)
+        if match:
+            do_link(m.chat.id, topic, match)
+            return
+        why = (f"Không có profile tên <b>{html.escape(arg)}</b>." if arg
+               else f"Không có profile trùng tên topic <b>{html.escape(name)}</b>." if name
+               else "Bot không đọc được tên topic này.")
+        choose_profile(m, topic, profiles, why)
+
     @bot.message_handler(content_types=CONTENT_TYPES)
     def _forward(m):
         if m.from_user and m.from_user.is_bot:
@@ -999,6 +1368,10 @@ def register_handlers():
     def _callback(c):
         if c.data == CHOSEN_DATA:
             bot.answer_callback_query(c.id, "Đã chọn rồi.")
+        elif c.data.startswith(RESET_DATA):
+            on_reset_button(c)
+        elif c.data.startswith(LINK_DATA):
+            on_link_button(c)
         else:
             choose(c)
 

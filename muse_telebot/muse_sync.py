@@ -28,6 +28,7 @@ MUSE_FILE_INPUT = "input[type='file']"
 SEND_ATTEMPTS = 3  # lan dau dung trang dang mo; cac lan sau refresh trang roi thu lai
 UPLOAD_MAX_WAIT_SECONDS = 30
 SEND_CONFIRM_POLLS = 20  # x 0.5s: cho tin vua gui hien trong chat
+DELIVERY_CONFIRM_SECONDS = 20  # tin da hien: cho Muse nhan (bat dau lam viec) hoac bao "Delivery not confirmed"
 RESTART_GAP_SECONDS = 300  # trinh duyet treo: khoi dong lai profile toi da 1 lan moi ngan nay giay
 # Muse dang lam viec: nut Stop cua o chat hien ra (luc ranh no van nam trong DOM nhung trong khoi inert/aria-hidden),
 # hoac cau tra loi dang duoc viet ra. Kiem tra tren muse.ai ngay 2026-10-28.
@@ -107,7 +108,12 @@ MESSAGES_JS = r"""() => {
   const role = item.getAttribute('data-message-role');
   const out = {id: item.getAttribute('data-message-id'), role};
   if (role !== 'assistant') {  // tin nguoi dung: chu de biet 1 lan gui truoc (tuong loi) thuc ra da toi muse
-    out.text = item.innerText.trim().slice(0, 2000);
+    // Muse khong nhan duoc tin: dong do "Delivery not confirmed" (span role=alert) duoi bong tin. Kiem tra 2026-11-05.
+    const alerts = [...item.querySelectorAll('[data-pel-impression="error_content_impression"], [role="alert"]')];
+    out.failed = alerts.length > 0;
+    let text = item.innerText;
+    for (const a of alerts) text = text.replace(a.innerText, '');
+    out.text = text.trim().slice(0, 2000);
     return out;
   }
   const body = item.querySelector('[data-hatch-assistant-message-body]');
@@ -201,7 +207,17 @@ FILE_JS = """async () => { const id = %s, name = %s, sleep = ms => new Promise(r
   return text; }"""
 
 logger = logging.getLogger("muse.sync")
-lock = threading.Lock()  # 1 trinh duyet / 1 o chat: gui tung tin mot (muse_auto cung dung)
+_profile_locks = {}
+_profile_locks_guard = threading.Lock()
+
+
+def lock_for(profile):
+    """Khóa các thao tác trình duyệt cùng profile mà không chặn các profile khác."""
+    with _profile_locks_guard:
+        lock = _profile_locks.get(profile)
+        if lock is None:
+            lock = _profile_locks[profile] = threading.RLock()
+        return lock
 
 
 def fox_profiles():
@@ -233,31 +249,34 @@ def chat_browser(chat):
 
 def is_busy(fox):
     """Muse dang lam viec trong chat cua fox (chat_browser)?"""
-    return bool(fox.evaluate(BUSY_JS))
+    with lock_for(fox.profile):
+        return bool(fox.evaluate(BUSY_JS))
 
 
 def messages(fox):
     """Cac tin cuoi trong chat cua fox (xem MESSAGES_JS)."""
-    return fox.evaluate(MESSAGES_JS) or []
+    with lock_for(fox.profile):
+        return fox.evaluate(MESSAGES_JS) or []
 
 
 def reload_chat(fox, url):
     """Tai lai trang chat: anh/video Muse vua tao doi khi ket o khung "dang tai" hang phut, tai lai trang la nap ngay."""
-    with lock:  # khong tai lai giua luc dang go tin vao o chat
+    with lock_for(fox.profile):
         fox.navigate(url)
         fox.wait_visible(MUSE_INPUT, 30)
 
 
 def fetch_media(fox, src):
     """Tai anh/video/file Muse dinh kem (src thuong la blob:) ngay trong trang. Tra ve (bytes, mime)."""
-    head, _, data = fox.evaluate(FETCH_JS % json.dumps(src)).partition(",")
+    with lock_for(fox.profile):
+        head, _, data = fox.evaluate(FETCH_JS % json.dumps(src)).partition(",")
     return base64.b64decode(data), head.removeprefix("data:").split(";")[0]
 
 
 def fetch_file(fox, message_id, name):
     """Noi dung chu cua file Muse dinh kem (VD .md) trong tin message_id, qua khung xem file cua Muse (xem FILE_JS).
     None neu khung xem khong co noi dung chu."""
-    with lock:  # bam / dong panel: khong chen vao luc dang go tin
+    with lock_for(fox.profile):
         return fox.evaluate(FILE_JS % (json.dumps(message_id), json.dumps(name)))
 
 
@@ -298,6 +317,20 @@ def _flat(s):
     return " ".join((s or "").split())
 
 
+def delivered(fox, before):
+    """Sau khi tin moi hien trong chat: cho Muse xac nhan da nhan. Muse bat dau lam viec / co tin tra loi moi -> da
+    nhan; tin moi cua nguoi dung hien "Delivery not confirmed" -> chua nhan (phai tai lai trang va gui lai). Het
+    DELIVERY_CONFIRM_SECONDS ma khong co loi thi coi nhu da gui."""
+    deadline = time.time() + DELIVERY_CONFIRM_SECONDS
+    while True:
+        new = [m for m in messages(fox) if m["id"] not in before]
+        if any(m["role"] == "user" and m.get("failed") for m in new):
+            return False
+        if any(m["role"] == "assistant" for m in new) or fox.evaluate(BUSY_JS) or time.time() >= deadline:
+            return True
+        time.sleep(1)
+
+
 def try_send(chat, text, files, refresh, seen=None, base=None):
     """Mot lan thu gui text + files (duong dan, phai nam trong FOXPROFILE_UPLOAD_DIRS) vao chat. (da_gui, thong_bao).
     seen (set): dien id cac tin dang co truoc khi gui, de biet tin nao cua Muse la tra loi moi.
@@ -313,8 +346,8 @@ def try_send(chat, text, files, refresh, seen=None, base=None):
     if base is not None:
         if not base:
             base.update(before)
-        elif text and any(m["role"] == "user" and m["id"] not in base and _flat(text)[:60] in _flat(m.get("text"))
-                          for m in current):
+        elif text and any(m["role"] == "user" and m["id"] not in base and not m.get("failed")
+                          and _flat(text)[:60] in _flat(m.get("text")) for m in current):
             if seen is not None:
                 seen.clear()
                 seen.update(base)
@@ -330,6 +363,8 @@ def try_send(chat, text, files, refresh, seen=None, base=None):
     fox.press("Enter", MUSE_INPUT)
     if not text:  # chi co file: o chat von rong nen khong co dau hieu xoa de kiem tra
         time.sleep(2)
+        if not delivered(fox, before):
+            return False, f"{key}: Muse bao \"Delivery not confirmed\", chua gui duoc."
         return True, f"Da gui vao {key}."
     # O chat duoc xoa chua du: trang treo (2026-10-29 23:58) van xoa o chat ma tin khong len muse. Phai thay tin
     # nguoi dung moi trong chat.
@@ -338,6 +373,8 @@ def try_send(chat, text, files, refresh, seen=None, base=None):
         time.sleep(0.5)
         cleared = cleared or not fox.evaluate(f"() => document.querySelector('{MUSE_INPUT}').value")
         if cleared and any(m["role"] == "user" and m["id"] not in before for m in messages(fox)):
+            if not delivered(fox, before):
+                return False, f"{key}: Muse bao \"Delivery not confirmed\", chua gui duoc."
             return True, f"Da gui vao {key}."
     if cleared:
         return False, f"{key}: o chat da xoa nhung tin khong hien trong chat, chua gui duoc."
@@ -352,7 +389,7 @@ def send(chat, text="", files=(), seen=None, base=None):
     if not text and not files:
         return False, "Tin rong, khong co gi de gui."
     base = set() if base is None else base
-    with lock:
+    with lock_for(chat["profile"]):
         for attempt in range(SEND_ATTEMPTS + 1):
             if attempt == SEND_ATTEMPTS:  # het refresh: trinh duyet treo -> khoi dong lai roi thu lan cuoi
                 if not can_restart(chat["profile"]):
@@ -380,7 +417,7 @@ def muse_ready(profile):
     fox = FoxProfileBrowser(profile, log=logger.debug)
     if not fox.profile_exists() or not fox.is_running():
         return False
-    with lock:
+    with lock_for(profile):
         try:
             fox.open_tab(MUSE_URL)
         except FoxError as e:
@@ -388,6 +425,174 @@ def muse_ready(profile):
                 return False
             raise
         return fox.visible(MUSE_INPUT, 3000)
+
+
+# ---------- Reset Muse: Settings -> Data controls -> Reset <ten agent> -> nhap ten agent -> Reset ----------
+# Giao dien tieng Anh (profile Muse dat locale en-US), kiem tra 2026-11-05. Nut Reset chi bat khi ten agent go dung;
+# bot doc ten agent ngay tren muc "Reset <ten agent>" nen nguoi dung khong phai go.
+# Tab muse.ai thuong nam sau tab khac, ma o tab nen requestAnimationFrame bi treo: click cua Playwright (cho phan tu
+# "on dinh") bi timeout, hop thoai dong xong van nam trong DOM voi data-state="closed" (het animation moi go). Vi vay:
+# mo Settings bang phim tat Ctrl+,, bam cac muc bang JS, chi tinh hop thoai data-state khac "closed", dong hop thoai
+# bang cach tai lai trang.
+SETTINGS_SHORTCUT = "Control+Comma"
+DATA_CONTROLS_LABEL = "Data controls"
+RESET_ITEM_LABEL = "Reset"
+_OPEN_DIALOGS = "[...document.querySelectorAll('[role=dialog]')].filter(d => d.getAttribute('data-state') !== 'closed')"
+# Moi lan goi tien 1 buoc: thay muc reset thi tra ve 'name:<ten agent>' (va bam no neu click=true), chua thi bam Data
+# controls ('dc'), chua mo Settings thi 'nodialog'. Goi lap lai vi trang vua tai lai co the chua nhan cu bam dau tien.
+# Muc reset mang ten agent: "Reset Muse", "Reset Vit"... (RESET_ITEM_LABEL + " <ten agent>").
+DATA_CONTROLS_JS = """(click) => { const ds = %s; const d = ds[ds.length - 1]; if (!d) return 'nodialog';
+  const items = [...d.querySelectorAll('button, [role=button]')];
+  const r = items.find(e => e.innerText.trim().startsWith(%s + ' '));
+  if (r) { if (click) r.click(); return 'name:' + r.innerText.trim().slice(%d).trim(); }
+  const c = items.find(e => e.innerText.trim() === %s); if (c) { c.click(); return 'dc'; }
+  return 'nodc'; }""" % (_OPEN_DIALOGS, json.dumps(RESET_ITEM_LABEL), len(RESET_ITEM_LABEL) + 1,
+                         json.dumps(DATA_CONTROLS_LABEL))
+OPEN_RESET_SECONDS = 30
+DEFAULT_AGENT_NAME = "Muse"  # ten agent Muse dat san cho tai khoan moi / vua reset
+RESET_NAME_INPUT = '[data-testid="hatch-reset-confirm-name-input"]'
+RESET_DONE_SECONDS = 120
+_RESET_BUTTON = """const i = document.querySelector('%s'); const d = i && i.closest('[role=dialog]');
+  if (!i || (d && d.getAttribute('data-state') === 'closed')) return 'gone';
+  const b = [...(d || document).querySelectorAll('button')].find(e => e.innerText.trim() === 'Reset');
+  if (!b) return 'nobutton';""" % RESET_NAME_INPUT
+RESET_STATE_JS = "() => { %s return b.disabled || b.getAttribute('aria-disabled') === 'true' ? 'disabled' : 'enabled'; }" \
+    % _RESET_BUTTON
+RESET_CLICK_JS = "() => { %s if (b.disabled) return 'disabled'; b.click(); return 'clicked'; }" % _RESET_BUTTON
+DIALOG_COUNT_JS = "() => %s.length" % _OPEN_DIALOGS
+
+
+def close_dialogs(fox):
+    """Dong cac hop thoai dang mo (Reset, Settings) bang cach tai lai trang chat."""
+    if fox.evaluate(DIALOG_COUNT_JS):
+        fox.navigate(MUSE_URL)
+        fox.wait_visible(MUSE_INPUT, 30)
+
+
+def _poll(fox, js, want, seconds):
+    """Chay js cho toi khi ket qua thuoc want hoac het gio. Loi tam thoi (trang dang tai lai) thi thu tiep."""
+    deadline, last = time.time() + seconds, None
+    while time.time() < deadline:
+        try:
+            last = fox.evaluate(js)
+        except FoxError as e:
+            last = e
+        if last in want:
+            break
+        time.sleep(0.5)
+    return last
+
+
+RESET_VERIFY_SECONDS = 15
+
+
+def _muse_tab(fox):
+    """URL tab muse.ai hien tai cua profile (sau reset trang co the da chuyen sang URL khac), None neu khong co."""
+    return next((t["url"] for t in fox.tabs() if "muse.ai" in t["url"]), None)
+
+
+def _settled_ids(fox, seconds=10):
+    """Id cac tin trong chat sau khi trang nap xong (vua tai lai thi danh sach tin hien cham vai giay)."""
+    deadline, ids = time.time() + seconds, set()
+    while True:
+        ids = {m["id"] for m in messages(fox)}
+        if ids or time.time() >= deadline:
+            return ids
+        time.sleep(1)
+
+
+def _data_controls(fox, click_reset):
+    """Mo Settings -> Data controls, doc ten agent tu muc "Reset <ten agent>" (bam muc do neu click_reset).
+    Tra ve ten agent, hoac None neu khong mo duoc (step cuoi ghi vao log)."""
+    deadline, pressed, step = time.time() + OPEN_RESET_SECONDS, 0, None
+    js = "() => (%s)(%s)" % (DATA_CONTROLS_JS, "true" if click_reset else "false")
+    while time.time() < deadline:
+        step = fox.evaluate(js)
+        if isinstance(step, str) and step.startswith("name:"):
+            return step[5:]
+        if step == "nodialog" and time.time() - pressed > 3:
+            fox.press(SETTINGS_SHORTCUT)
+            pressed = time.time()
+        time.sleep(1)
+    logger.warning(f"{fox.profile}: khong mo duoc Settings -> {DATA_CONTROLS_LABEL} (buoc cuoi: {step})")
+    return None
+
+
+def agent_name(profile):
+    """Ten agent Muse cua profile (doc o Settings -> Data controls), None neu profile dang tat / khong doc duoc.
+    Khong tu mo profile dang tat."""
+    with lock_for(profile):
+        fox = FoxProfileBrowser(profile, log=logger.info)
+        if not fox.profile_exists() or not fox.is_running():
+            return None
+        open_chat(fox, MUSE_URL)
+        close_dialogs(fox)
+        try:
+            return _data_controls(fox, click_reset=False)
+        finally:
+            close_dialogs(fox)
+
+
+def rename_agent_text(name):
+    """Tin gui vao Muse de doi ten agent."""
+    return f"Change your name to {name}"
+
+
+def reset_muse(profile, agent_name=None):
+    """Xoa toan bo du lieu Muse cua profile (lich su chat, file, artifact, task) qua Settings -> Data controls ->
+    Reset <ten agent>. agent_name: ten go vao o xac nhan; None = dung ten agent doc tren muc reset. Tra ve
+    (ok, thong_bao). Giu lock cua profile suot qua trinh nen gui tin / auto Allow cua profile nay phai cho."""
+    with lock_for(profile):
+        fox = FoxProfileBrowser(profile, log=logger.info)
+        if not fox.profile_exists():
+            return False, f"Profile '{profile}' không còn trong FoxProfile."
+        open_chat(fox, MUSE_URL)
+        before = _settled_ids(fox)
+        close_dialogs(fox)
+        clicked = False
+        try:
+            shown = _data_controls(fox, click_reset=True)
+            if shown is None:
+                return False, (f"Không mở được Settings → {DATA_CONTROLS_LABEL} → {RESET_ITEM_LABEL} trên Muse "
+                               f"(giao diện Muse có thể đã đổi).")
+            agent_name = agent_name or shown
+            if not fox.wait_visible(RESET_NAME_INPUT, 15):
+                return False, "Không mở được hộp xác nhận Reset Muse (giao diện Muse có thể đã đổi)."
+            fox.type_into(RESET_NAME_INPUT, agent_name)
+            if _poll(fox, RESET_STATE_JS, {"enabled"}, 5) != "enabled":
+                return False, (f'Tên agent "{agent_name}" không khớp với tên agent trong Muse, chưa reset. '
+                               f"Tên agent hiện trong Muse ở Settings → Data controls, dòng \"Reset <tên agent>\" "
+                               f"(phân biệt chữ hoa/thường).")
+            if fox.evaluate(RESET_CLICK_JS) != "clicked":
+                return False, "Không bấm được nút Reset, chưa reset."
+            clicked = True
+            logger.warning(f"{profile}: da bam Reset Muse")
+            if _poll(fox, RESET_STATE_JS, {"gone"}, RESET_DONE_SECONDS) != "gone":
+                return False, f"Đã bấm Reset nhưng sau {RESET_DONE_SECONDS} giây Muse chưa xong. Kiểm tra trên web."
+        finally:
+            if not clicked:
+                try:
+                    close_dialogs(fox)
+                except Exception:
+                    pass
+        # Muse xoa du lieu sau khi dong hop thoai (tin cu con hien vai giay) va co the chuyen trang (VD /access: Muse
+        # bat tai khoan vua reset vao danh sach cho). Cho Muse xu ly, tai lai trang roi kiem tra o lan doc cuoi.
+        time.sleep(RESET_VERIFY_SECONDS)
+        page = _muse_tab(fox)
+        if page:
+            fox.tab = page
+            fox.navigate(MUSE_URL)
+            page = _muse_tab(fox)
+        if page and same_url(page, MUSE_URL) and fox.wait_visible(MUSE_INPUT, 60):
+            time.sleep(RESET_VERIFY_SECONDS)  # tin cu (neu con) hien cham sau khi tai trang
+            left = before & {m["id"] for m in messages(fox)}
+            if left:
+                return False, f"Đã bấm Reset nhưng Muse vẫn còn {len(left)} tin cũ. Kiểm tra trên web."
+            return True, "Đã reset Muse."
+        if page and "/access" in page:
+            return True, ("Đã reset Muse. Sau khi reset, Muse chuyển tài khoản sang trang chờ \"Join the waitlist\" "
+                          "(Muse báo chưa hỗ trợ khu vực của tài khoản / IP này). Mở profile trên FoxProfile để xử lý.")
+        return True, f"Đã reset Muse. Muse chưa hiện ô chat ({page or 'không có tab muse.ai'}): mở profile để kiểm tra."
 
 
 VN_NAMES = {"vn", "vietnam", "viet nam"}

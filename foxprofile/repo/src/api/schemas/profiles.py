@@ -16,6 +16,8 @@ class ProfileCreate(BaseModel):
         description="camoufox (Firefox) or chrome (experimental, fingerprint-chromium). "
         "Fixed once the profile is created",
     )
+    auto_post_fanpage: bool = Field(False, description="Auto-post to the Facebook page(s) logged in here")
+    auto_post_tiktok: bool = Field(False, description="Auto-post to the TikTok account logged in here")
 
 
 class ProfileUpdate(BaseModel):
@@ -27,6 +29,8 @@ class ProfileUpdate(BaseModel):
     timezone: str | None = Field(None, description='"" switches back to automatic')
     locale: str | None = Field(None, description='"" switches back to automatic')
     engine: str | None = Field(None, description="Cannot be changed; only the current value")
+    auto_post_fanpage: bool | None = None
+    auto_post_tiktok: bool | None = None
 
 
 class ProfileResponse(BaseModel):
@@ -36,6 +40,8 @@ class ProfileResponse(BaseModel):
     timezone: str | None = None
     locale: str | None = None
     engine: str = "camoufox"
+    auto_post_fanpage: bool = False
+    auto_post_tiktok: bool = False
     data_dir: str
     is_running: bool
 

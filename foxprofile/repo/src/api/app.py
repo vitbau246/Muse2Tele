@@ -20,6 +20,7 @@ from .routes import (
     profiles_router,
     proxy_router,
     settings_router,
+    update_router,
 )
 from .schemas.common import SuccessResponse
 
@@ -72,6 +73,7 @@ def create_app(container: Container, self_url: str | None = None) -> FastAPI:
     app.include_router(page_router, prefix=API_PREFIX, dependencies=protected)
     app.include_router(proxy_router, prefix=API_PREFIX, dependencies=protected)
     app.include_router(settings_router, prefix=API_PREFIX, dependencies=protected)
+    app.include_router(update_router, prefix=API_PREFIX, dependencies=protected)
     app.include_router(mcp_setup_router, prefix=API_PREFIX, dependencies=protected)
     app.router.routes.append(mcp_route)
 

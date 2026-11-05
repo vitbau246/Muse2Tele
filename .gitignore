@@ -26,3 +26,10 @@ build/
 dist/
 *.egg-info/
 muse_telebot/muse_autoapprove.json
+
+# Dang bai fanpage/TikTok: cache danh sach Trang, anh chup chan doan
+social_post/data/
+social_post/logs/
+
+# Tu cap nhat: trang thai, nhat ky, sao luu file code cu
+.update/

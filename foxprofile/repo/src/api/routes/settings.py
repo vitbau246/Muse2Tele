@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+from dataclasses import asdict
+
 from fastapi import APIRouter, HTTPException
 
-from ...core import settings
-from ..schemas.settings import SettingsResponse, SettingsUpdate
+from ...core import settings, upload_dirs
+from ..schemas.settings import (
+    SettingsResponse,
+    SettingsUpdate,
+    UploadDirsResponse,
+    UploadDirsUpdate,
+)
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -29,3 +36,19 @@ def update_settings(body: SettingsUpdate) -> SettingsResponse:
     except settings.SettingsError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     return _current()
+
+
+@router.get("/upload-dirs", response_model=UploadDirsResponse)
+def get_upload_dirs() -> UploadDirsResponse:
+    return UploadDirsResponse(**asdict(upload_dirs.current()))
+
+
+@router.put("/upload-dirs", response_model=UploadDirsResponse)
+def update_upload_dirs(body: UploadDirsUpdate) -> UploadDirsResponse:
+    """Choose FOXPROFILE_UPLOAD_DIRS and MUSE_UPLOAD_DIR (saved to .env). Applies to profiles
+    launched afterwards; the Telegram bot picks up MUSE_UPLOAD_DIR when restarted."""
+    try:
+        result = upload_dirs.save(body.upload_dirs, body.muse_upload_dir)
+    except upload_dirs.UploadDirsError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return UploadDirsResponse(**asdict(result))

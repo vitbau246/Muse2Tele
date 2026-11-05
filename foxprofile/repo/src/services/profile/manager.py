@@ -111,6 +111,8 @@ class ProfileManager:
                             "timezone": valid_or_none(p_data.get("timezone"), validate_timezone),
                             "locale": valid_or_none(p_data.get("locale"), validate_locale),
                             "engine": _engine_or_default(p_data.get("engine")),
+                            "auto_post_fanpage": p_data.get("auto_post_fanpage") is True,
+                            "auto_post_tiktok": p_data.get("auto_post_tiktok") is True,
                         }
                         self.profiles[name] = Profile(**clean_data)
                 logger.info("Loaded %d profiles", len(self.profiles))
@@ -232,6 +234,21 @@ class ProfileManager:
             logger.info("Updated profile: %s -> %s", original_name, new_name)
             return True
 
+    def set_auto_post(
+        self, name: str, fanpage: bool | None = None, tiktok: bool | None = None
+    ) -> bool:
+        """Turn automatic posting to a Facebook page / TikTok on or off; None keeps the value."""
+        with self._lock:
+            profile = self.profiles.get(name)
+            if profile is None:
+                return False
+            if fanpage is not None:
+                profile.auto_post_fanpage = bool(fanpage)
+            if tiktok is not None:
+                profile.auto_post_tiktok = bool(tiktok)
+            self.save_profiles()
+            return True
+
     def delete_profile(self, name: str) -> bool:
         with self._lock:
             if name not in self.profiles:
@@ -293,6 +310,8 @@ class ProfileManager:
                     timezone=src.timezone,
                     locale=src.locale,
                     engine=src.engine,
+                    auto_post_fanpage=src.auto_post_fanpage,
+                    auto_post_tiktok=src.auto_post_tiktok,
                 )
                 self.save_profiles()
         except OSError as e:  # FileExistsError included

@@ -5,6 +5,8 @@
 ## [Unreleased]
 
 ### Thêm
+- Muse2Tele: thông báo phiên bản mới trên GitHub (dải thông báo + nút "Kiểm tra cập nhật" ở app desktop và web panel) và cập nhật toàn bộ dự án bằng 1 nút, giữ nguyên dữ liệu; API `GET /api/v1/update`, `POST /api/v1/update/apply` (gọi `updater.py` của Muse2Tele, chạy tách rời rồi khởi động lại FoxProfile).
+- Muse2Tele: ô tick "Tự động đăng lên fanpage Facebook / TikTok" khi tạo và sửa profile (app desktop và web panel), lưu trong `profiles.json` (`auto_post_fanpage`, `auto_post_tiktok`), có trong `POST/PATCH/GET /api/v1/profiles`; dòng profile hiện nhãn Fanpage / TikTok. Mục "Thư mục upload" ở thanh bên để chọn `FOXPROFILE_UPLOAD_DIRS` (nhiều thư mục) và `MUSE_UPLOAD_DIR` kèm giải thích, lưu vào `.env` của Muse2Tele; API `GET/PUT /api/v1/settings/upload-dirs`.
 - Clone profile: nút Clone trên mỗi dòng (app desktop và web panel), `POST /api/v1/profiles/{name}/clone` và MCP `clone_profile`. Profile mới lấy proxy, hệ điều hành, timezone, locale và engine của profile nguồn; tuỳ chọn chép dữ liệu trình duyệt (cookie, đăng nhập, tab; bỏ qua file khoá và cache) và tạo fingerprint mới. Clone được cả khi profile nguồn đang chạy.
 - Web panel: mục "Download folder" ở thanh bên để chọn thư mục lưu file tải về (lưu trong `settings.json`, áp dụng ngay cả với profile đang chạy). `FOXPROFILE_DOWNLOAD_DIR` chỉ là giá trị mặc định ban đầu; nếu chưa đặt gì thì dùng `Downloads/FoxProfile`. API: `GET/PUT /api/v1/settings`.
 - `FOXPROFILE_WINDOW_SIZE` (ví dụ `1280x800`): đặt kích thước cửa sổ trình duyệt cho mọi lần mở, áp lên fingerprint của profile lúc mở (không sửa `fingerprint.json`). Cửa sổ nhỏ hơn tốn ít bộ nhớ GPU hơn. Để trống thì giữ kích thước theo fingerprint như trước.

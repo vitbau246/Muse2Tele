@@ -13,6 +13,7 @@ def build_content_area(
     bulk_bar: ft.Control | None = None,
     search_field: ft.Control | None = None,
     header_slot: ft.Container | None = None,
+    notice_slot: ft.Container | None = None,
 ) -> ft.Container:
     """Main content: title, search, then the profile sheet (bulk bar, header, rows)."""
     sheet = ft.Container(
@@ -39,6 +40,7 @@ def build_content_area(
             spacing=0,
             expand=True,
             controls=[
+                *([] if notice_slot is None else [notice_slot]),
                 ft.Row(
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                     vertical_alignment=ft.CrossAxisAlignment.END,

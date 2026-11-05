@@ -4,6 +4,7 @@ from .page import router as page_router
 from .profiles import router as profiles_router
 from .proxy import router as proxy_router
 from .settings import router as settings_router
+from .update import router as update_router
 
 __all__ = [
     "browser_router",
@@ -12,4 +13,5 @@ __all__ = [
     "profiles_router",
     "proxy_router",
     "settings_router",
+    "update_router",
 ]

@@ -41,6 +41,8 @@ def profile_response(profile: Profile, bl: IBrowserLauncher) -> ProfileResponse:
         timezone=profile.timezone,
         locale=profile.locale,
         engine=profile.engine,
+        auto_post_fanpage=profile.auto_post_fanpage,
+        auto_post_tiktok=profile.auto_post_tiktok,
         data_dir=os.path.join(os.getcwd(), DATA_DIR, profile.name),
         is_running=bl.is_running(profile.name),
     )

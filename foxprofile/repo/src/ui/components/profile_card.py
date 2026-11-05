@@ -108,14 +108,17 @@ def build_profile_card(
                 ),
                 _cell(
                     "name",
-                    ft.Text(
-                        profile.name,
-                        size=14,
-                        font_family=FONT_SEMIBOLD,
-                        color=COLORS["text_main"],
-                        no_wrap=True,
-                        overflow=ft.TextOverflow.ELLIPSIS,
-                        tooltip=profile.name,
+                    _stack(
+                        ft.Text(
+                            profile.name,
+                            size=14,
+                            font_family=FONT_SEMIBOLD,
+                            color=COLORS["text_main"],
+                            no_wrap=True,
+                            overflow=ft.TextOverflow.ELLIPSIS,
+                            tooltip=profile.name,
+                        ),
+                        _auto_post(profile),
                     ),
                 ),
                 _cell("device", _device(profile, device)),
@@ -167,6 +170,34 @@ def _minor(text: str, data: bool = False) -> ft.Text:
 
 def _stack(*lines: ft.Control) -> ft.Column:
     return ft.Column(spacing=1, alignment=ft.MainAxisAlignment.CENTER, controls=list(lines))
+
+
+def _auto_post(profile: Profile) -> ft.Control:
+    """Second line of the name cell: which networks Muse2Tele auto-posts to."""
+    on = [
+        get_string(key)
+        for key, enabled in (
+            ("auto_post_short_fanpage", profile.auto_post_fanpage),
+            ("auto_post_short_tiktok", profile.auto_post_tiktok),
+        )
+        if enabled
+    ]
+    if not on:
+        return _minor(get_string("auto_post_off"))
+    return ft.Row(
+        spacing=4,
+        controls=[
+            ft.Container(
+                padding=ft.Padding.symmetric(horizontal=5),
+                border_radius=3,
+                border=ft.Border.all(1, COLORS["sidebar"]),
+                content=ft.Text(
+                    label, size=10.5, font_family=FONT_SEMIBOLD, color=COLORS["sidebar"]
+                ),
+            )
+            for label in on
+        ],
+    )
 
 
 def _device(profile: Profile, device: str) -> ft.Row:

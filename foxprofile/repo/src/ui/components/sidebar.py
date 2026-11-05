@@ -69,6 +69,8 @@ def build_sidebar(
     filter_column: ft.Column | None = None,
     language: str = "en",
     on_language: Callable[[str], None] | None = None,
+    on_upload_dirs: Callable | None = None,
+    on_check_update: Callable | None = None,
 ) -> ft.Container:
     log_toggle_btn.on_click = on_toggle_log
     return ft.Container(
@@ -165,6 +167,26 @@ def build_sidebar(
                     ],
                 ),
                 log_column,
+                ft.Container(height=8),
+                ft.OutlinedButton(
+                    get_string("upload_dirs_button"),
+                    icon=ft.Icons.FOLDER_OPEN_OUTLINED,
+                    width=208,
+                    height=38,
+                    style=RAIL_STYLE,
+                    on_click=on_upload_dirs,
+                    visible=on_upload_dirs is not None,
+                ),
+                ft.Container(height=8, visible=on_check_update is not None),
+                ft.OutlinedButton(
+                    get_string("update_check_button"),
+                    icon=ft.Icons.SYSTEM_UPDATE_ALT,
+                    width=208,
+                    height=38,
+                    style=RAIL_STYLE,
+                    on_click=on_check_update,
+                    visible=on_check_update is not None,
+                ),
                 ft.Container(height=8),
                 ft.OutlinedButton(
                     get_string("mcp_button"),

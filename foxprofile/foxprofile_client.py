@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Client REST cho FoxProfile (http://127.0.0.1:8000/api/v1): mo/dong profile va dieu khien tab hien hanh.
+Client REST cho FoxProfile (http://127.0.0.1:8090/api/v1): mo/dong profile va dieu khien tab hien hanh.
 
 Dung boi 00.facebook_business_upload.py. Moi lan goi REST phai xong trong < 60s (FoxProfile cat o 60s),
 nen cac thao tac cho lau (cho nut, cho upload...) duoc viet thanh vong lap thăm do o phia script.
@@ -38,7 +38,7 @@ class FoxError(Exception):
 
 class FoxProfileBrowser:
     def __init__(self, profile, base_url=None, token=None, log=print):
-        base_url = (base_url or os.environ.get("FOXPROFILE_URL", "http://127.0.0.1:8000")).rstrip("/")
+        base_url = (base_url or os.environ.get("FOXPROFILE_URL", "http://127.0.0.1:8090")).rstrip("/")
         token = os.environ.get("FOXPROFILE_API_TOKEN", "") if token is None else token
         self.profile = profile
         self.log = log

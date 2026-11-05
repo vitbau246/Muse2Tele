@@ -1,9 +1,11 @@
 import asyncio
 import os
+import threading
 import time
 
 import flet as ft
 
+from ..core import app_update
 from ..core.config import DATA_DIR
 from ..core.container import Container
 from ..core.logging import get_logger
@@ -20,7 +22,10 @@ from .components import (
 )
 from .components.profile_card import build_header_row
 from .components.sidebar import build_filter_buttons
+from .components.update_banner import build_update_banner
 from .dialogs.mcp_guide import open_mcp_guide
+from .dialogs.update import open_update_dialog
+from .dialogs.upload_dirs import open_upload_dirs_dialog
 from .handlers import AppHandlers
 from .refs import UIRefs
 from .state import ITEMS_PER_PAGE, AppState
@@ -45,6 +50,10 @@ class App:
         self._live_since: dict[str, str] = {}
         self._filter_column = ft.Column(spacing=2)
         self._header_slot = ft.Container()
+        self._notice_slot = ft.Container()
+        self._update_info: dict | None = None
+        self._update_dismissed = False
+        self._update_started = False
         c.event_bus.subscribe(self.state.schedule_refresh)
         self.h = AppHandlers(
             pm=self.pm,
@@ -74,6 +83,9 @@ class App:
         if not self._reconcile_started:
             self._reconcile_started = True
             page.run_task(self._ui_reconcile_loop)
+        if not self._update_started and app_update.root() is not None:
+            self._update_started = True
+            threading.Thread(target=self._update_loop, daemon=True).start()
 
     def _build_ui(self) -> None:
         """(Re)build every control; strings are read at build time."""
@@ -86,6 +98,7 @@ class App:
         )
         self._filter_column = ft.Column(spacing=2)
         self._header_slot = ft.Container()
+        self._notice_slot = ft.Container()
         self.page.title = get_string("window_title")
         self.page.controls.clear()
         self.page.add(self._build_root_layout(self.refs))
@@ -129,6 +142,12 @@ class App:
             filter_column=self._filter_column,
             language=current_language(),
             on_language=self._set_language,
+            on_upload_dirs=lambda _: open_upload_dirs_dialog(
+                self.page, self._file_picker, self._log
+            ),
+            on_check_update=(lambda _: self._check_update_now())
+            if app_update.root() is not None
+            else None,
         )
         content = build_content_area(
             r.content_subtitle,
@@ -139,6 +158,7 @@ class App:
             r.bulk_bar,
             r.search_field,
             header_slot=self._header_slot,
+            notice_slot=self._notice_slot,
         )
         return ft.Row(
             expand=True,
@@ -242,6 +262,12 @@ class App:
             if page_profiles
             else [self._build_empty_or_no_results()]
         )
+        self._notice_slot.content = build_update_banner(
+            self._update_info,
+            self._open_update_dialog,
+            self._dismiss_update,
+            self._update_dismissed,
+        )
         rebuild_bulk_bar(
             r.bulk_bar,
             self.state,
@@ -264,6 +290,68 @@ class App:
         r.prev_btn.disabled = self.state.current_page <= 1
         r.next_btn.disabled = self.state.current_page >= total_pages
         self._safe_update()
+
+    # -- Muse2Tele self-update --
+
+    def _update_loop(self) -> None:
+        """Check GitHub soon after start, then every 6 h; poll quickly while an update runs."""
+        time.sleep(4)
+        last_check = 0.0
+        while self.page:
+            busy = bool(self._update_info and self._update_info.get("busy"))
+            if busy or time.time() - last_check >= 6 * 3600:
+                try:
+                    self._update_info = app_update.status(force=not busy and last_check > 0)
+                except Exception as e:
+                    logger.warning("Update check failed: %s", e)
+                last_check = time.time() if not busy else last_check
+                self.state.schedule_refresh()
+            time.sleep(3 if busy else 60)
+
+    def _check_update_now(self) -> None:
+        self._snack(get_string("update_checking"))
+
+        def work() -> None:
+            info = app_update.status(force=True)
+            self._update_info = info
+            self.state.schedule_refresh()
+            if info.get("available"):
+                self._open_update_dialog()
+            elif info.get("error"):
+                self._snack(get_string("update_check_error", error=info["error"]))
+            else:
+                self._snack(get_string("update_latest"))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _open_update_dialog(self) -> None:
+        if not self.page or not self._update_info:
+            return
+
+        def confirm() -> str | None:
+            try:
+                app_update.apply()
+            except RuntimeError as e:
+                return str(e)
+            self._log(get_string("update_started"))
+            self._update_info = {**(self._update_info or {}), "busy": True, "available": False,
+                                 "last_update": app_update.last_update()}
+            self.state.schedule_refresh()
+            self._snack(get_string("update_started"))
+            return None
+
+        open_update_dialog(self.page, self._update_info, confirm)
+
+    def _dismiss_update(self) -> None:
+        self._update_dismissed = True
+        self._refresh_profiles()
+
+    def _snack(self, text: str) -> None:
+        if self.page:
+            try:
+                self.page.show_dialog(ft.SnackBar(ft.Text(text)))
+            except Exception as e:
+                logger.warning("Snack failed: %s", e)
 
     @staticmethod
     def _device_label(name: str) -> str:

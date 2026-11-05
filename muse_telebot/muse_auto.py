@@ -87,15 +87,16 @@ def loop(profiles, notify):
         if not enabled():
             continue
         for profile in profiles():
-            if not muse_sync.lock.acquire(blocking=False):  # dang gui tin vao muse: de lan sau
-                break
+            lock = muse_sync.lock_for(profile)
+            if not lock.acquire(blocking=False):
+                continue
             try:
                 clicked = approve_once(profile)
             except Exception as e:
                 logger.warning(f"auto approve {profile}: {type(e).__name__}: {e}")
                 continue
             finally:
-                muse_sync.lock.release()
+                lock.release()
             if clicked:
                 logger.info(f"Auto Allow {profile}: {clicked}")
                 notify(profile, clicked)

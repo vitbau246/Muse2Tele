@@ -75,7 +75,8 @@ Nếu cửa sổ bot báo **CHUA CO TOKEN** hoặc **TOKEN SAI**, làm lại Bư
 1. Trên Telegram, tạo **Nhóm mới** (New Group), thêm bot của bạn vào nhóm.
 2. Bấm vào tên nhóm → **✏️ Sửa (Edit)** → bật **Chủ đề (Topics)** → Lưu.
 3. Vẫn trong phần sửa nhóm: **Quản trị viên (Administrators)** → **Thêm quản trị viên** → chọn bot →
-   bật quyền **Quản lý chủ đề (Manage topics)** → Lưu.
+   bật quyền **Quản lý chủ đề (Manage topics)** và **Xoá tin nhắn (Delete messages)** → Lưu.
+   (Quyền xoá tin nhắn dùng cho lệnh `/reset`, để bot xoá sạch topic của profile.)
 4. Vào nhóm, gõ **`/setup`** và gửi. Bot trả lời ✅ là xong.
 
 ## Bước 7 — Thêm tài khoản Muse
@@ -119,15 +120,33 @@ Mẹo:
 
 ## Các lệnh của bot
 
+Bot tự khai báo menu lệnh (gõ `/` để xem) và lời giới thiệu với Telegram mỗi khi khởi động, nên **không cần** 
+vào BotFather để đặt `/setcommands`, `/setdescription` hay `/setabouttext`.
+
 | Lệnh | Gõ ở đâu | Tác dụng |
 |---|---|---|
-| `/start` | Chat riêng với bot | Xem trạng thái cấu hình và việc cần làm tiếp |
+| `/start`, `/help` | Chat riêng với bot | Xem trạng thái cấu hình và việc cần làm tiếp |
 | `/setup` | Trong nhóm | Gắn nhóm này với bot |
+| `/gan` | Trong topic | Gán topic này với một profile: tên topic trùng tên profile thì gán luôn, không thì bot hiện nút chọn profile. `/gan tên_profile` để gán thẳng. Gán lại thì thay liên kết cũ (mỗi profile 1 topic) |
 | `/kiemtra` | Chat riêng hoặc nhóm | Kiểm tra IP từng profile, cảnh báo IP Việt Nam |
 | `/allow_on`, `/allow_off` | Chat riêng hoặc nhóm | Bật / tắt việc bot tự bấm **Allow** khi Muse xin quyền (mặc định bật) |
+| `/reset` | Trong topic của profile (hoặc `/reset tên_profile` ở chat riêng) | **Xoá vĩnh viễn** toàn bộ dữ liệu Muse của profile và toàn bộ tin trong topic, sau khi bạn bấm nút xác nhận. Xong bot đặt tên agent Muse = tên profile |
 
-Chỉ chủ bot dùng được `/setup`, `/kiemtra`, `/allow_on`, `/allow_off`. Mọi người trong nhóm đều nhắn được cho Muse
+Chỉ chủ bot dùng được `/setup`, `/gan`, `/kiemtra`, `/allow_on`, `/allow_off`, `/reset`. Mọi người trong nhóm đều nhắn được cho Muse
 trong các topic, nên **chỉ thêm người bạn tin tưởng** vào nhóm.
+
+## Cập nhật phiên bản mới
+
+- Khi trên GitHub có bản mới, dashboard FoxProfile hiện dải **"Đã có phiên bản mới của Muse2Tele"** và bot nhắn
+  riêng cho chủ bot (mỗi bản 1 lần). Muốn kiểm tra ngay: bấm **Kiểm tra cập nhật** ở thanh bên.
+- Bấm **Xem thay đổi & cập nhật** → **Cập nhật ngay**. Chương trình tự: tải bản mới → tắt các profile đang chạy,
+  FoxProfile, bot, AutoPost → thay code → cài thêm thư viện nếu cần → mở lại tất cả (1–3 phút) và mở lại các profile
+  đang chạy lúc trước.
+- **Dữ liệu giữ nguyên:** `.env`, `foxprofile\data\` (profile, cookie, đăng nhập, fingerprint), `Videos\`,
+  `social_post\data\`, trạng thái bot. File code bạn đã sửa tay được sao lưu ở `.update\backup\` trước khi thay.
+- Bản tải ZIP: lần đầu dashboard luôn báo có bản mới (chưa biết bản đang cài), cập nhật 1 lần là đồng bộ.
+  Bản `git clone`: cập nhật bằng `git pull` tự động; có file sửa chưa commit thì từ chối để không mất thay đổi.
+- Nhật ký: `.update\update.log`. Chạy tay: `python updater.py check` / `python updater.py apply`.
 
 ---
 
@@ -154,7 +173,7 @@ Muse2tele\
   .env                      cấu hình cục bộ (token) — không chia sẻ / commit
   setup.bat                 cài .venv, thư viện, trình duyệt Camoufox
   start_all.bat             mở FoxProfile, chờ API, mở bot
-  start_foxprofile.bat      chỉ mở FoxProfile (app + API http://127.0.0.1:8000)
+  start_foxprofile.bat      chỉ mở FoxProfile (app + API http://127.0.0.1:8090)
   start_bot.bat             chỉ mở bot
   muse_telebot\
     muse_telebot.py         bot: topic ⇄ main chat Muse, tự tạo topic, hướng dẫn cấu hình, cảnh báo IP VN
@@ -170,9 +189,31 @@ Muse2tele\
 - **Tạo topic:** mỗi 30 giây bot đọc danh sách profile của FoxProfile. Profile chưa có topic, đang chạy và hiện
   ô chat của `https://muse.ai/` (đã đăng nhập) thì bot tạo topic tên = tên profile. Bot không tự mở profile đang
   tắt. Profile bị xoá khỏi FoxProfile thì bot bỏ map; topic bị xoá trên Telegram thì bot tạo lại.
-- **Đồng bộ:** tin trong topic → main chat Muse của profile (lỗi thì refresh, thử lại, khởi động lại trình duyệt;
-  Muse lỗi kéo dài thì xếp hàng gửi lại mỗi 60 giây, tối đa 30 phút). Trả lời của Muse được đọc ngay sau khi gửi
-  (relay) và mỗi 5 giây cho mọi topic (watch), mỗi tin chỉ chuyển một lần.
+- **Đồng bộ:** mỗi profile có hàng đợi riêng; tin trong cùng topic vẫn gửi tuần tự, còn các profile khác nhau có thể
+  xử lý đồng thời. Lỗi thì refresh, thử lại, khởi động lại trình duyệt; Muse lỗi kéo dài thì xếp hàng gửi lại mỗi
+  60 giây, tối đa 30 phút. Trả lời được đọc ngay sau khi gửi (relay); bộ theo dõi web quét mỗi 5 giây, tối đa 4
+  profile cùng lúc. Mỗi tin chỉ chuyển một lần. Việc đọc Muse vẫn dựa vào giao diện web qua FoxProfile nên thời
+  gian trả lời và trạng thái hình ảnh/phim phụ thuộc tải trang, chưa tương đương webhook/API sự kiện.
 - **IP Việt Nam:** bot gọi `GET /api/v1/profiles/{name}/ip-check` của FoxProfile (đi qua proxy của profile) lúc
   khởi động, khi tạo topic, mỗi 6 giờ và khi gõ `/kiemtra`; quốc gia là VN thì cảnh báo trong topic và chat riêng.
+- **Reset:** `/reset` → nút *Xoá Muse của …*. Bot xếp việc vào hàng đợi của profile, mở muse.ai và làm
+  Settings → Data controls → Reset <tên agent> → tự gõ tên agent đọc trên dòng đó → Reset, rồi kiểm tra tin cũ đã
+  hết. Xong thì xoá topic cũ (xoá luôn mọi tin trong đó), tạo topic mới cùng tên và gửi Muse
+  `Change your name to <profile>`. Thiếu quyền xoá tin thì bot báo, giữ topic cũ. Selector dựa trên giao diện tiếng
+  Anh của Muse (profile để locale en-US).
+- **Tên agent:** khi tự tạo topic hoặc `/gan`, nếu agent Muse còn tên mặc định `Muse` thì bot gửi
+  `Change your name to <profile>` để tên agent trùng tên profile / topic. Agent đã có tên riêng thì giữ nguyên.
 - `MUSE_UPLOAD_DIR` phải nằm trong `FOXPROFILE_UPLOAD_DIRS`. Không chạy hai bot cùng token (Telegram báo 409).
+- **Tự động đăng fanpage / TikTok (`social_post\`):**
+  1. Trên dashboard FoxProfile, sửa profile → tick **Tự động đăng lên fanpage Facebook** và/hoặc **TikTok**.
+     Mở profile và đăng nhập Facebook / TikTok trong trình duyệt của profile đó.
+  2. `start_all.bat` mở thêm cửa sổ **Muse2tele_AutoPost** (hoặc chạy `start_autopost.bat`). Nó tạo thư mục
+     `Videos\downloads\social_queue\<tên profile>\` cho mỗi profile đã tick.
+  3. Bỏ file vào thư mục đó: video → TikTok + fanpage, ảnh → fanpage. Caption lấy từ file `.txt` cùng tên
+     (vd `clip1.mp4` + `clip1.txt`), không có thì dùng tên file. `pages.txt` (mỗi dòng 1 tên Trang) để chỉ đăng lên
+     một số Trang; không có thì đăng lên mọi Trang tài khoản quản lý.
+  4. Đăng xong file chuyển sang `done\`, lỗi 3 lần thì sang `failed\`. Chưa đăng nhập thì 30 phút thử lại.
+     Nhật ký: `social_post\logs\auto_post.log`. Thử không bấm Đăng: `python auto_post.py --dry-run`.
+  Script lẻ: `fanpage_post.py --profile P --list-pages | --plan jobs.json` (định dạng: `fanpage_jobs.py`),
+  `tiktok_post.py --profile P --folder D --file F [--caption "..."]`. Script làm việc trên một tab riêng, không
+  đụng tab Muse của bot. Thư mục hàng đợi phải nằm trong `FOXPROFILE_UPLOAD_DIRS` (đổi ở dashboard → Thư mục upload).
