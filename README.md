@@ -1,5 +1,10 @@
 # Muse2tele — Dùng Muse ngay trên Telegram
 
+![Muse2tele — Dùng Muse AI ngay trên Telegram](docs/promo.svg)
+
+> ❤️ **Ủng hộ dự án:** nếu Muse2tele giúp ích cho bạn, hãy ghé **[sanhdieu247.xyz](https://sanhdieu247.xyz)** để ủng
+> hộ và theo dõi các bản cập nhật mới.
+
 Muse2tele nối các tài khoản **Muse (muse.ai)** của bạn với **một nhóm Telegram**:
 
 - Mỗi profile trong FoxProfile (mỗi tài khoản Muse) có **một topic riêng** trong nhóm.
@@ -163,6 +168,13 @@ trong các topic, nên **chỉ thêm người bạn tin tưởng** vào nhóm.
 | Muse không trả lời / báo lỗi | Bot tự tải lại trang và thử lại; trình duyệt treo thì bot tự khởi động lại profile. Tin gửi lúc Muse lỗi được xếp hàng và tự gửi lại. |
 
 Nhật ký chi tiết của bot nằm ở `muse_telebot\muse_telebot.log` — gửi file này cho người hỗ trợ khi cần.
+
+---
+
+## ❤️ Ủng hộ dự án
+
+Muse2tele được phát triển và chia sẻ miễn phí. Nếu bạn thấy hữu ích, hãy ủng hộ tại
+**[sanhdieu247.xyz](https://sanhdieu247.xyz)** — mỗi sự ủng hộ giúp dự án tiếp tục được duy trì và cải tiến.
 
 ---
 

@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" font-family="'Segoe UI', 'Be Vietnam Pro', Arial, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#1e3a8a"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#38bdf8"/>
+      <stop offset="1" stop-color="#a78bfa"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="640" fill="url(#bg)"/>
+  <circle cx="1150" cy="80" r="220" fill="#38bdf8" opacity="0.08"/>
+  <circle cx="1220" cy="600" r="160" fill="#a78bfa" opacity="0.10"/>
+
+  <!-- tieu de -->
+  <text x="80" y="140" font-size="76" font-weight="800" fill="#ffffff">Muse2tele</text>
+  <rect x="80" y="162" width="190" height="6" rx="3" fill="url(#accent)"/>
+  <text x="80" y="230" font-size="36" font-weight="600" fill="#e0e7ff">Dùng Muse AI ngay trên Telegram</text>
+  <text x="80" y="275" font-size="24" fill="#94a3b8">Mỗi tài khoản Muse là một topic riêng trong nhóm của bạn</text>
+
+  <!-- tinh nang -->
+  <g font-size="24" fill="#e2e8f0">
+    <text x="80" y="345">💬  Nhắn tin, gửi ảnh / video / file như chat bình thường</text>
+    <text x="80" y="395">⚡  Tự tạo topic khi đăng nhập Muse trong FoxProfile</text>
+    <text x="80" y="445">🛡️  Cảnh báo khi dùng IP Việt Nam, tự bấm Allow</text>
+    <text x="80" y="495">🧩  Cài đặt bằng 1 cú bấm, không cần biết lập trình</text>
+  </g>
+
+  <!-- mo phong topic -->
+  <g transform="translate(860,170)">
+    <rect width="340" height="330" rx="22" fill="#ffffff" opacity="0.07" stroke="#ffffff" stroke-opacity="0.15"/>
+    <text x="24" y="44" font-size="20" font-weight="700" fill="#ffffff"># Muse1</text>
+    <rect x="24" y="70" width="220" height="52" rx="16" fill="#38bdf8"/>
+    <text x="40" y="103" font-size="18" fill="#0f172a">Tạo video giới thiệu 👀</text>
+    <rect x="96" y="140" width="220" height="80" rx="16" fill="#ffffff" opacity="0.92"/>
+    <text x="112" y="172" font-size="18" fill="#0f172a">Đây là video của bạn 🎬</text>
+    <text x="112" y="200" font-size="16" fill="#475569">muse_video.mp4</text>
+    <rect x="96" y="238" width="104" height="40" rx="12" fill="#a78bfa"/>
+    <text x="114" y="264" font-size="16" fill="#ffffff">Làm tiếp</text>
+    <rect x="212" y="238" width="104" height="40" rx="12" fill="#a78bfa"/>
+    <text x="238" y="264" font-size="16" fill="#ffffff">Sửa lại</text>
+  </g>
+
+  <!-- ung ho -->
+  <rect x="80" y="545" width="520" height="58" rx="29" fill="url(#accent)"/>
+  <text x="110" y="583" font-size="24" font-weight="700" fill="#0f172a">❤️  Ủng hộ dự án: sanhdieu247.xyz</text>
+</svg>
