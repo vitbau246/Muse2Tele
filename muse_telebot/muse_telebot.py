@@ -57,7 +57,8 @@ load_dotenv(HERE / ".env")
 load_dotenv(ENV_FILE)
 
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
-UPLOAD_DIR = Path(os.environ.get("MUSE_UPLOAD_DIR", str(ROOT / "Videos" / "downloads" / "muse_telebot")))
+# Duong dan tuyet doi: FoxProfile chay o thu muc khac (foxprofile\data), duong dan tuong doi se tro sai cho.
+UPLOAD_DIR = (HERE / os.environ.get("MUSE_UPLOAD_DIR", str(ROOT / "Videos" / "downloads" / "muse_telebot"))).resolve()
 STATE_FILE = HERE / "muse_telebot_state.json"
 TG_DOWNLOAD_LIMIT = 20 * 1024 * 1024  # getFile cua Bot API
 TG_UPLOAD_LIMIT = 50 * 1024 * 1024  # gui file qua Bot API
@@ -278,7 +279,12 @@ def process(batch, retry=False):
         if files or text.strip():
             base = batch[0].setdefault("base", set())
             ok, result = muse_sync.send(chat, text, files, seen=seen, base=base)
-            muse_down = not ok and not errors
+            # ok None = loi file / cau hinh upload: Muse van chay, giu tin lai thu mai chi lam ket ca topic.
+            muse_down = ok is False and not errors
+            if ok is None:
+                notify(f"⚠️ Bot không đưa được file từ Telegram vào Muse ({chat['key']}).\n{result}\n\n"
+                       f"Kiểm tra FOXPROFILE_UPLOAD_DIRS / MUSE_UPLOAD_DIR trong .env rồi khởi động lại "
+                       f"FoxProfile và bot. Gõ /start để bot tự kiểm tra lại.")
         else:
             ok, result = False, "không có gì để gửi"
         if errors:
@@ -1252,6 +1258,11 @@ def setup_steps():
             steps.append((False, "Bot không vào được nhóm đã gắn",
                           f"Thêm lại @{me.username} vào nhóm rồi gõ /setup trong nhóm. ({html.escape(str(e))})"))
     if profiles is not None:
+        error = muse_sync.check_upload(UPLOAD_DIR, profiles)
+        steps.append((not error, "FoxProfile nhận được ảnh/video bot tải từ Telegram",
+                      "Bot không đưa được file vào Muse: " + html.escape(error or "") + "\nTrong .env, "
+                      "<code>MUSE_UPLOAD_DIR</code> phải nằm trong <code>FOXPROFILE_UPLOAD_DIRS</code> (sửa ở "
+                      "dashboard FoxProfile → Thư mục upload), rồi khởi động lại FoxProfile và bot."))
         mapped = topics()
         steps.append((bool(mapped), f"Đã có {len(mapped)} topic profile: {html.escape(', '.join(mapped)) or '—'}",
                       "Trong FoxProfile: tạo profile (gắn proxy nước ngoài), bấm mở profile, đăng nhập "

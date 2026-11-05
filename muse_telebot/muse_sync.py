@@ -319,10 +319,61 @@ def restart_profile(profile, why=""):
             logger.warning(f"{profile}: khong mo lai duoc tab {url}: {e}")
 
 
+# Loi 400 cua FoxProfile khi kiem tra file truoc khi chon vao trang: file khong toi duoc trinh duyet (duong dan sai /
+# nam ngoai FOXPROFILE_UPLOAD_DIRS / chua bat upload). Refresh hay khoi dong lai trinh duyet khong chua duoc.
+UPLOAD_CONFIG_ERRORS = ("not a file", "outside the allowed upload folders", "file upload is disabled")
+UPLOAD_PROBE_SELECTOR = "#__muse2tele_upload_probe__"
+
+
+class UploadError(Exception):
+    """File khong dua duoc vao trinh duyet vi duong dan / cau hinh upload, khong phai vi Muse hay trinh duyet treo."""
+
+
+def _upload_config_error(e):
+    return isinstance(e, FoxError) and e.status == 400 and any(k in e.detail.lower() for k in UPLOAD_CONFIG_ERRORS)
+
+
 def upload_files(fox, files):
     for f in files:  # tung file mot: input file cua muse co the khong cho chon nhieu file 1 lan
-        fox.upload([f], input_selector=MUSE_FILE_INPUT, timeout=30000)
-        time.sleep(min(UPLOAD_MAX_WAIT_SECONDS, 3 + os.path.getsize(f) / 1048576))  # cho muse upload file xong
+        # Duong dan tuyet doi: FoxProfile (trinh duyet) chay o thu muc khac, duong dan tuong doi se tro sai cho
+        # (2026-11-06: "..\Videos\..." -> "[400] Not a file", tin video kep mai trong hang cho).
+        path = os.path.abspath(f)
+        if not os.path.isfile(path):
+            raise UploadError(f"file {path} khong con tren may")
+        try:
+            fox.upload([path], input_selector=MUSE_FILE_INPUT, timeout=30000)
+        except FoxError as e:
+            if _upload_config_error(e):
+                raise UploadError(f"FoxProfile khong nhan file {path}: {e.detail}") from e
+            raise
+        time.sleep(min(UPLOAD_MAX_WAIT_SECONDS, 3 + os.path.getsize(path) / 1048576))  # cho muse upload file xong
+
+
+def check_upload(folder, profiles):
+    """Thu that FoxProfile co nhan file trong folder khong: tao 1 file nho, goi upload vao 1 phan tu khong ton tai cua
+    profile dau tien dang mo (FoxProfile kiem tra file truoc, roi moi tim phan tu -> chi het gio, khong dong vao trang).
+    Tra ve None = nhan duoc / chua kiem tra duoc (khong profile nao dang mo), nguoc lai la thong bao loi."""
+    for profile in profiles:
+        fox = FoxProfileBrowser(profile, log=logger.debug)
+        try:
+            if not fox.is_running():
+                continue
+        except FoxError:
+            return None
+        probe = Path(folder) / "__upload_probe__.txt"
+        try:
+            Path(folder).mkdir(parents=True, exist_ok=True)
+            probe.write_text("probe", encoding="utf-8")
+            fox.upload([str(probe.resolve())], input_selector=UPLOAD_PROBE_SELECTOR, timeout=300)
+        except OSError as e:
+            return f"khong ghi duoc file vao {folder}: {e}"
+        except FoxError as e:
+            if _upload_config_error(e):
+                return f"{e.detail} (thu muc bot luu file: {Path(folder).resolve()})"
+        finally:
+            probe.unlink(missing_ok=True)
+        return None
+    return None
 
 
 def _flat(s):
@@ -410,7 +461,8 @@ def try_send(chat, text, files, refresh, seen=None, base=None):
 def send(chat, text="", files=(), seen=None, base=None):
     """Gui text (+ files) vao chat muse; loi thi refresh trang va thu lai, van loi thi khoi dong lai trinh duyet cua
     profile (treo) va thu them 1 lan. Tra ve (ok, thong_bao). seen, base: xem try_send (base: giu qua cac lan goi
-    send cho cung 1 tin de lan gui lai sau khong tao tin trung)."""
+    send cho cung 1 tin de lan gui lai sau khong tao tin trung).
+    ok = None: loi file / cau hinh upload (UploadError) -- thu lai khong chua duoc, Muse van binh thuong."""
     text, files, msg = (text or "").strip(), list(files), ""
     if not text and not files:
         return False, "Tin rong, khong co gi de gui."
@@ -427,6 +479,9 @@ def send(chat, text="", files=(), seen=None, base=None):
                     break
             try:
                 ok, msg = try_send(chat, text, files, refresh=0 < attempt < SEND_ATTEMPTS, seen=seen, base=base)
+            except UploadError as e:
+                logger.error(f"send {chat['key']}: {e}")
+                return None, f"{chat['key']}: khong dua duoc file vao Muse -- {e}"
             except Exception as e:  # FoxError, mang...
                 ok, msg = False, f"{chat['key']}: loi {type(e).__name__}: {e}"
             if ok:
