@@ -134,11 +134,53 @@ vào BotFather để đặt `/setcommands`, `/setdescription` hay `/setabouttext
 | `/setup` | Trong nhóm | Gắn nhóm này với bot |
 | `/gan` | Trong topic | Gán topic này với một profile: tên topic trùng tên profile thì gán luôn, không thì bot hiện nút chọn profile. `/gan tên_profile` để gán thẳng. Gán lại thì thay liên kết cũ (mỗi profile 1 topic) |
 | `/kiemtra` | Chat riêng hoặc nhóm | Kiểm tra IP từng profile, cảnh báo IP Việt Nam |
+| `/tiendo` | Chat riêng hoặc nhóm | Xem bảng việc của đội Muse (chế độ có chỉ huy) |
+| `/ketqua T8` | Chat riêng hoặc nhóm | Xem ngay ảnh/video kết quả của 1 việc trong đội Muse (kể cả khi chưa đạt) |
 | `/allow_on`, `/allow_off` | Chat riêng hoặc nhóm | Bật / tắt việc bot tự bấm **Allow** khi Muse xin quyền (mặc định bật) |
 | `/reset` | Trong topic của profile (hoặc `/reset tên_profile` ở chat riêng) | **Xoá vĩnh viễn** toàn bộ dữ liệu Muse của profile và toàn bộ tin trong topic, sau khi bạn bấm nút xác nhận. Xong bot đặt tên agent Muse = tên profile |
 
 Chỉ chủ bot dùng được `/setup`, `/gan`, `/kiemtra`, `/allow_on`, `/allow_off`, `/reset`. Mọi người trong nhóm đều nhắn được cho Muse
 trong các topic, nên **chỉ thêm người bạn tin tưởng** vào nhóm.
+
+## Đội Muse: 1 Muse làm chỉ huy
+
+Mặc định mỗi Muse tự làm trong topic của mình (**Độc lập**). Muốn 1 Muse điều phối cả đội:
+
+1. Trên dashboard FoxProfile bấm **Đội Muse** ở thanh bên, chọn **Có chỉ huy**.
+2. Chọn **Muse chỉ huy**. Nên chọn Muse không dùng cho việc khác, vì khung chat của nó dùng để điều phối.
+3. Chọn cách **gửi việc**:
+   - **Duyệt tay**: mỗi việc chỉ huy giao hiện trong mục General kèm nút ✅ Gửi / ❌ Bỏ.
+   - **Tự động**: việc được gửi đi ngay.
+4. Ở mục **Thành viên và vai trò**: bỏ tick Muse nào không muốn cho vào đội (chỉ huy sẽ không giao việc cho Muse
+   đó; profile mới tạo tự vào đội), và ghi **vai trò** từng Muse (vd *viết kịch bản*, *làm ảnh*) để chỉ huy biết giao
+   việc cho ai.
+5. Mục **Duyệt kết quả**: **điểm tối thiểu để đạt** (/10, mặc định 8), số lần làm lại tối đa (3), số phút im lặng
+   trước khi bot nhắc Muse (3), báo quá hạn sau (30 phút), số việc mới mỗi giờ (20); **Video nộp từng cái một**
+   (mặc định bật); **Gửi cả ảnh/video chưa đạt lên Telegram** (mặc định tắt).
+6. Ô **Xoá dữ liệu Muse khi lưu** (mặc định tick, khuyến nghị): bot xoá sạch dữ liệu Muse (lịch sử chat, file,
+   artifact) của chỉ huy và các Muse trong đội, kèm tin trong topic của chúng, để cả đội bắt đầu sạch không lẫn thông
+   tin cũ. Không hoàn tác; dashboard hỏi xác nhận. Bỏ tick thì chỉ lưu cài đặt, không xoá gì.
+7. Bấm **Lưu**: bot áp dụng ngay, không cần khởi động lại.
+
+Sau đó bạn nhắn yêu cầu vào **mục General** của nhóm. Chỉ huy sẽ chia việc và giao cho các Muse. Mỗi việc có mã
+T1, T2...; việc giao đi hiện cả trong topic của Muse nhận việc. Muse làm xong thì bot gửi kết quả (cả ảnh/video) cho
+chỉ huy chấm. Gõ `/tiendo` để xem bảng việc.
+
+- **Duyệt tự động theo điểm:** từ điểm tối thiểu trở lên là đạt; dưới mức đó bot tự gửi điểm và nhận xét cho Muse làm
+  lại. Làm lại quá số lần tối đa mà vẫn chưa đạt: bot dừng việc và báo bạn.
+- **Video từng cái một:** chỉ huy giao `[[giao: Muse3 | mô tả | 5 video]]` thì Muse làm và nộp đúng 1 video, chỉ huy
+  chấm đạt bot mới cho làm video tiếp.
+- **Việc chưa đạt chỉ báo bằng chữ:** Telegram chỉ nhận kết quả chữ và số lần chưa đạt; ảnh/video được bot giữ lại gửi
+  chỉ huy chấm, đạt mới gửi vào topic của Muse đó. Muốn xem sớm: `/ketqua T8`.
+- **Trang tổng hợp video:** chỉ huy luôn giữ 1 trang artifact "Tổng hợp video" (mã việc, Muse tạo, link tải video,
+  caption, hashtag, điểm, trạng thái, chỉ đạo tiếp) và dựa vào đó để chỉ đạo làm lại hay làm tiếp. Muse làm video phải
+  ghi 3 dòng `Link tải:`, `Caption:`, `Hashtag:` khi nộp; bot trích ra thành "dòng chuẩn" gửi kèm báo cáo để chỉ huy
+  chép đúng vào trang.
+- **Chống lệch thông tin:** chỉ huy nhắc mã việc đã đạt (vd "dùng bộ nhân vật T5") thì bot tự đính kèm ảnh/video và mô
+  tả đã duyệt của T5 cho Muse làm, không để chỉ huy tả lại theo trí nhớ. Bot báo cho Muse điểm các việc trước của nó,
+  nhắc Muse 1 lần trước khi báo cáo khi Muse im lặng chưa ghi xong, và bỏ qua điểm chấm trùng.
+
+Muốn dừng ngay: đổi về **Độc lập** trên dashboard.
 
 ## Cập nhật phiên bản mới
 
@@ -213,6 +255,15 @@ Muse2tele\
   hết. Xong thì xoá topic cũ (xoá luôn mọi tin trong đó), tạo topic mới cùng tên và gửi Muse
   `Change your name to <profile>`. Thiếu quyền xoá tin thì bot báo, giữ topic cũ. Selector dựa trên giao diện tiếng
   Anh của Muse (profile để locale en-US).
+- **Đội Muse (`muse_team.py`, cài ở `muse_telebot\muse_team.json`):** chế độ có chỉ huy thì tin trong General
+  đi vào Muse chỉ huy. Bot gửi cho chỉ huy bảng giới thiệu đội và cú pháp lệnh (lần đầu và mỗi khi đội / vai trò
+  đổi). Chỉ huy ra lệnh bằng dòng `[[giao: Muse2 | việc]]`, `[[nhan: T3 | nội dung]]`, `[[lamlai: T3 | cần sửa gì]]`,
+  `[[danhgia: T3 | 8/10 | nhận xét]]`; Muse làm việc kết thúc bằng `[[xong: T3]]` hoặc `[[vuong: T3 | lý do]]`. Bot
+  thực hiện lệnh và ẩn các dòng này khỏi Telegram. Mỗi Muse làm 1 việc một lúc. Muse không ghi `[[xong]]` mà đã rảnh
+  và im lặng `quiet_minutes` phút thì bot nhắc 1 lần, vẫn im thì báo cáo. Bảng việc lưu trong `muse_telebot_state.json`
+  (`tasks`); file kết quả ở `<MUSE_UPLOAD_DIR>/team/<mã việc>/p<video>r<lần>/` (vòng chưa đạt xoá khi việc đóng, cả
+  thư mục xoá sau 7 ngày). Dashboard lưu `reset_id` mới khi chủ tick "Xoá dữ liệu Muse": bot reset Muse của chỉ huy +
+  đội đúng 1 lần cho mỗi mã đó.
 - **Tên agent:** khi tự tạo topic hoặc `/gan`, nếu agent Muse còn tên mặc định `Muse` thì bot gửi
   `Change your name to <profile>` để tên agent trùng tên profile / topic. Agent đã có tên riêng thì giữ nguyên.
 - `MUSE_UPLOAD_DIR` phải nằm trong `FOXPROFILE_UPLOAD_DIRS`. Không chạy hai bot cùng token (Telegram báo 409).

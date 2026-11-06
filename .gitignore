@@ -11,6 +11,7 @@ Videos/downloads/
 muse_telebot/muse_users.db
 muse_telebot/muse_sync.json
 muse_telebot/muse_telebot_state.json
+muse_telebot/muse_team.json
 *.db
 *.sqlite
 *.sqlite3

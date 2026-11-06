@@ -5,7 +5,7 @@ import time
 
 import flet as ft
 
-from ..core import app_update
+from ..core import app_update, muse_team, post_map
 from ..core.config import DATA_DIR
 from ..core.container import Container
 from ..core.logging import get_logger
@@ -24,6 +24,8 @@ from .components.profile_card import build_header_row
 from .components.sidebar import build_filter_buttons
 from .components.update_banner import build_update_banner
 from .dialogs.mcp_guide import open_mcp_guide
+from .dialogs.muse_team import open_muse_team_dialog
+from .dialogs.post_map import open_post_map_dialog
 from .dialogs.update import open_update_dialog
 from .dialogs.upload_dirs import open_upload_dirs_dialog
 from .handlers import AppHandlers
@@ -147,6 +149,18 @@ class App:
             ),
             on_check_update=(lambda _: self._check_update_now())
             if app_update.root() is not None
+            else None,
+            on_team=(
+                lambda _: open_muse_team_dialog(
+                    self.page, [p.name for p in self.pm.list_profiles()], self._log
+                )
+            )
+            if muse_team.current().bot_installed
+            else None,
+            on_post_map=(
+                lambda _: open_post_map_dialog(self.page, self.pm.list_profiles(), self._log)
+            )
+            if post_map.current().installed
             else None,
         )
         content = build_content_area(

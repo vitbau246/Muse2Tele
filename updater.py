@@ -43,7 +43,7 @@ PROTECTED = (
     ".git/", ".venv/", "venv/", ".update/", ".env", "Videos/",
     "foxprofile/data/", "social_post/data/", "social_post/logs/",
     "muse_telebot/muse_telebot_state.json", "muse_telebot/muse_sync.json", "muse_telebot/muse_users.db",
-    "muse_telebot/muse_autoapprove.json", "muse_telebot/muse_telebot.log",
+    "muse_telebot/muse_autoapprove.json", "muse_telebot/muse_telebot.log", "muse_telebot/muse_team.json",
 )
 REQUIREMENTS = ("requirements.txt", "foxprofile/repo/requirements.txt")
 
