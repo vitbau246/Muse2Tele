@@ -19,7 +19,10 @@ Khac ban cu:
 
 File anh/video phai nam trong FOXPROFILE_UPLOAD_DIRS (mac dinh Muse2Tele\\Videos\\downloads).
 
-Ma thoat: 0 = tat ca OK, 1 = co loi, 2 = khong thay file, 3 = chua dang nhap, 4 = FoxProfile chua san sang.
+Job co "page_id" (auto_post.py ghi tu Bang dang bai): chon Trang theo Page ID; Trang khong thuoc tai khoan dang
+nhap thi khong dang.
+Ma thoat: 0 = tat ca OK, 1 = co loi, 2 = khong thay file, 3 = chua dang nhap, 4 = FoxProfile chua san sang,
+          6 = Trang khong thuoc tai khoan dang nhap (khong dang).
 """
 
 import argparse
@@ -197,6 +200,10 @@ def open_composer(asset_id: str, files: list[Path]) -> None:
     fb.navigate(f"https://business.facebook.com/latest/composer/?asset_id={asset_id}", wait_until="load")
     if not fb.wait_visible(ADD_MEDIA_SEL, 60):
         raise TimeoutError("Khong thay nut 'Them anh/video'")
+    # Business Suite tu chuyen sang Trang khac neu tai khoan khong quan ly Trang nay -> khong dang nham
+    landed = asset_id_of(fb.url())
+    if landed and landed != str(asset_id):
+        raise RuntimeError(f"Business Suite mo Trang {landed} thay vi {asset_id}: dung, khong dang nham Trang")
     # Trang Business Suite hay nghen (doc file video vai GB) -> Playwright cho phan tu "dung yen" lau hon 10-15s
     fb.upload(files, trigger=ADD_MEDIA_SEL, timeout=SLOW_CLICK_MS)
     time.sleep(3)
@@ -728,13 +735,35 @@ def run(a) -> int:
         if a.list_pages:
             return 0
         by_name = {p["name"].casefold(): p for p in pages if p["asset_id"]}
+        by_id = {str(p["asset_id"]): p for p in pages if p["asset_id"]}
+        refreshed = a.list_pages or a.refresh_pages
         todo = [j for j in jobs if wanted(j)
                 and (a.comment or not a.due_only or a.now or fanpage_jobs.job_due(j, now))]
         log(f"Se chay {len(todo)}/{len(jobs)} job: {[j['page'] for j in todo]}")
 
-        failed = 0
+        failed = wrong = 0
         for i, j in enumerate(todo, 1):
-            p = by_name.get(j["page"].casefold())
+            page_id = str(j.get("page_id") or "")
+            if page_id:  # Bang dang bai: chon Trang theo Page ID, khong theo ten (2 Trang co the trung ten)
+                if page_id not in by_id and not refreshed:
+                    log(f"Page ID {page_id} chua co trong danh sach Trang da quet -> quet lai")
+                    pages = list_pages()
+                    Path(a.pages_cache or fanpage_jobs.pages_cache(a.profile)).write_text(
+                        json.dumps(pages, ensure_ascii=False, indent=2), encoding="utf-8")
+                    by_id = {str(p["asset_id"]): p for p in pages if p["asset_id"]}
+                    refreshed = True
+                p = by_id.get(page_id)
+                if not p:
+                    log(f"DUNG: Trang {j['page']} ({page_id}) KHONG thuoc tai khoan Facebook dang nhap o profile "
+                        f"'{a.profile}' -> khong dang (sua Bang dang bai hoac dang nhap dung tai khoan)")
+                    j["error"] = "Trang không thuộc tài khoản đang đăng nhập"
+                    if not a.comment:
+                        j["photo_status"] = j["video_status"] = "failed"
+                    wrong += 1
+                    save()
+                    continue
+            else:
+                p = by_name.get(j["page"].casefold())
             if not p:
                 log(f"Khong co Trang '{j['page']}' trong danh sach")
                 j["error"] = "không có Trang"
@@ -778,6 +807,9 @@ def run(a) -> int:
                 save()
             if i < len(todo):
                 time.sleep(a.delay)
+        if wrong:
+            log(f"{wrong} job co Trang khong thuoc tai khoan dang nhap")
+            return 6
         if failed:
             log(f"That bai {failed} job")
             return 1

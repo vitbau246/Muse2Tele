@@ -71,6 +71,8 @@ def build_sidebar(
     on_language: Callable[[str], None] | None = None,
     on_upload_dirs: Callable | None = None,
     on_check_update: Callable | None = None,
+    on_team: Callable | None = None,
+    on_post_map: Callable | None = None,
 ) -> ft.Container:
     log_toggle_btn.on_click = on_toggle_log
     return ft.Container(
@@ -176,6 +178,26 @@ def build_sidebar(
                     style=RAIL_STYLE,
                     on_click=on_upload_dirs,
                     visible=on_upload_dirs is not None,
+                ),
+                ft.Container(height=8, visible=on_team is not None),
+                ft.OutlinedButton(
+                    get_string("team_button"),
+                    icon=ft.Icons.GROUPS_OUTLINED,
+                    width=208,
+                    height=38,
+                    style=RAIL_STYLE,
+                    on_click=on_team,
+                    visible=on_team is not None,
+                ),
+                ft.Container(height=8, visible=on_post_map is not None),
+                ft.OutlinedButton(
+                    get_string("post_map_button"),
+                    icon=ft.Icons.SHARE_OUTLINED,
+                    width=208,
+                    height=38,
+                    style=RAIL_STYLE,
+                    on_click=on_post_map,
+                    visible=on_post_map is not None,
                 ),
                 ft.Container(height=8, visible=on_check_update is not None),
                 ft.OutlinedButton(

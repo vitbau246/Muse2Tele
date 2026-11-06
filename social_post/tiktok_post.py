@@ -8,7 +8,10 @@ Chay:
 
 File video phai nam trong FOXPROFILE_UPLOAD_DIRS (mac dinh Muse2Tele\\Videos\\downloads).
 
-Ma thoat: 0 OK, 1 loi, 2 khong thay file, 3 chua dang nhap TikTok, 5 FoxProfile chua san sang.
+--expect-account <username>: chi dang khi tai khoan TikTok dang nhap dung la tai khoan nay (auto_post.py truyen tu
+Bang dang bai).
+Ma thoat: 0 OK, 1 loi, 2 khong thay file, 3 chua dang nhap TikTok, 5 FoxProfile chua san sang,
+          6 tai khoan dang nhap khac --expect-account (khong dang).
 """
 
 import argparse
@@ -129,11 +132,56 @@ def post_video(fb, post_wait: float, max_attempts: int) -> None:
     raise RuntimeError(f"Nut 'Dang' van con sau {max_attempts} lan click")
 
 
+# @username cua tai khoan dang dang nhap: API passport, khong duoc thi doc du lieu trang chu (webapp.app-context).
+ACCOUNT_JS = """async () => {
+    try {
+        const r = await fetch('/passport/web/account/info/?aid=1988', {credentials: 'include'});
+        const j = await r.json();
+        const u = j && j.data && (j.data.username || j.data.unique_id);
+        if (u) return String(u);
+    } catch (e) {}
+    try {
+        const html = await (await fetch('/', {credentials: 'include'})).text();
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const el = doc.getElementById('__UNIVERSAL_DATA_FOR_REHYDRATION__');
+        const data = el && JSON.parse(el.textContent);
+        const user = data && data.__DEFAULT_SCOPE__ && data.__DEFAULT_SCOPE__['webapp.app-context']
+            && data.__DEFAULT_SCOPE__['webapp.app-context'].user;
+        if (user && user.uniqueId) return String(user.uniqueId);
+    } catch (e) {}
+    return '';
+}"""
+EXIT_WRONG_ACCOUNT = 6
+
+
+class WrongAccount(Exception):
+    pass
+
+
+def check_account(fb, expected: str, always: bool = False) -> None:
+    """Dung neu tai khoan TikTok dang nhap khac tai khoan ghi trong Bang dang bai (tranh dang nham kenh).
+    always: doc tai khoan ca khi khong co expected (in TIKTOK_ACCOUNT=... cho check_accounts.py)."""
+    expected = expected.strip().lstrip("@").lower()
+    if not expected and not always:
+        return
+    current = str(eval_retry(fb, ACCOUNT_JS) or "").strip().lstrip("@").lower()
+    print(f"TIKTOK_ACCOUNT={current}", flush=True)
+    if not expected:
+        if not current:
+            raise RuntimeError("Khong doc duoc tai khoan TikTok dang dang nhap")
+        return
+    if not current:
+        raise RuntimeError("Khong doc duoc tai khoan TikTok dang dang nhap -> chua dang (se thu lai)")
+    if current != expected:
+        raise WrongAccount(f"Profile dang dang nhap TikTok @{current}, Bang dang bai ghi @{expected}")
+    log(f"Tai khoan TikTok khop: @{current}")
+
+
 def run(folder: str, file: str, profile: str, post_wait: float = 30, upload_wait: float = 600,
         max_post_attempts: int = 5, no_post: bool = False, keep_open: bool = False,
-        caption_text: str | None = None) -> int:
+        caption_text: str | None = None, expect_account: str = "", check_only: bool = False) -> int:
     video_path = Path(folder) / file
-    if not video_path.is_file():
+    if not check_only and not video_path.is_file():
         log(f"Khong tim thay file: {video_path}")
         return EXIT_NO_FILE
 
@@ -153,6 +201,10 @@ def run(folder: str, file: str, profile: str, post_wait: float = 30, upload_wait
             raise RuntimeError("Khong thay nut chon video lan trang dang nhap")
         if which == 1 or "/login" in fb.url():
             raise NotLoggedIn(f"Profile '{profile}' chua dang nhap TikTok")
+        check_account(fb, expect_account, always=check_only)
+        if check_only:
+            log("--check-account: chi kiem tra tai khoan, khong dang")
+            return EXIT_OK
 
         log(f"Chon file: {video_path}")
         fb.upload([video_path], input_selector=FILE_INPUT, timeout=30000)
@@ -182,6 +234,9 @@ def run(folder: str, file: str, profile: str, post_wait: float = 30, upload_wait
     except NotLoggedIn as e:
         log(f"LOI: {e}")
         return EXIT_NOT_LOGGED_IN
+    except WrongAccount as e:
+        log(f"DUNG, KHONG DANG: {e}")
+        return EXIT_WRONG_ACCOUNT
     except Exception as e:
         log(f"LOI: {e}")
         save_shot(fb, Path(folder) / f"error_tiktok_{video_path.stem}.png")
@@ -194,8 +249,10 @@ def run(folder: str, file: str, profile: str, post_wait: float = 30, upload_wait
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description="Tu dong dang video len TikTok da dang nhap o profile FoxProfile")
-    ap.add_argument("--folder", required=True)
-    ap.add_argument("--file", required=True)
+    ap.add_argument("--folder", default="")
+    ap.add_argument("--file", default="")
+    ap.add_argument("--check-account", action="store_true",
+                    help="Chi mo TikTok Studio, in TIKTOK_ACCOUNT=<username> roi thoat (khong can --folder/--file)")
     ap.add_argument("--profile", required=True, help="Ten profile FoxProfile, vd Full1")
     ap.add_argument("--post-wait-timeout", type=float, default=30,
                     help="So giay cho trang chuyen ve danh sach sau moi lan click Dang")
@@ -204,14 +261,18 @@ def main() -> None:
     ap.add_argument("--max-post-attempts", type=int, default=5)
     ap.add_argument("--caption", default=None, help="Noi dung bai dang (mac dinh: ten file + hashtag co san)")
     ap.add_argument("--caption-file", default=None, help="Doc caption tu file .txt (UTF-8)")
+    ap.add_argument("--expect-account", default="",
+                    help="@username TikTok phai dang nhap o profile (Bang dang bai); khac thi khong dang, ma thoat 6")
     ap.add_argument("--no-post", action="store_true", help="Chay thu: KHONG bam Dang")
     ap.add_argument("--keep-open", action="store_true", help="Khong dong profile du chinh script mo no")
     a = ap.parse_args()
+    if not a.check_account and not (a.folder and a.file):
+        ap.error("can --folder va --file (hoac --check-account)")
     caption = a.caption
     if a.caption_file:
         caption = Path(a.caption_file).read_text(encoding="utf-8")
     sys.exit(run(a.folder, a.file, a.profile, a.post_wait_timeout, a.upload_wait,
-                 a.max_post_attempts, a.no_post, a.keep_open, caption))
+                 a.max_post_attempts, a.no_post, a.keep_open, caption, a.expect_account, a.check_account))
 
 
 if __name__ == "__main__":

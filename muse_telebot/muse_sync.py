@@ -99,8 +99,17 @@ MESSAGES_JS = r"""() => {
  const presOf = p => { try { const w = p.wrappedJSObject || p;
      return w[Object.keys(w).find(k => k.startsWith('__reactFiber'))].return.memoizedProps.presentation || {};
    } catch (e) { return {}; } };
+ // Danh sach file cua khung trong props (data.images / data.videos ...): {path, label, missing, mime}
+ // Mang cua trang (Camoufox): goi .filter/.map tren no bi "Permission denied" -> chep ra mang thuong theo chi so.
+ const entries = p => { const raw = Object.values(presOf(p).data || {}).find(Array.isArray) || [], list = [];
+   for (let i = 0; i < raw.length; i++) { const e = raw[i] || {};
+     list.push({label: e.label || '', path: e.path || '', missing: e.missing}); }
+   return list; };
+ // Luoi nhieu anh vua tai lai trang: o chua nap chua co <img> nen tiles() khong dem, luoi 4 anh ma moi 1 o nap xong
+ // trong nhu tin 1 anh (2026-11-06: 1 profile chi chuyen 1/4 anh). Props van liet ke du: o nao chua thay la dang nap.
+ const unseen = p => ['image', 'video'].includes(kindOf(p)) ? Math.max(0, entries(p).length - tiles(p).length) : 0;
  const waiting = items.flatMap(i => presentations(i).filter(p => !['audio', 'file'].includes(kindOf(p))).flatMap(p =>
-   tiles(p).filter(t => !mediaOf(p, t) && !t.querySelector('a[href]') && !gone(t))))[0];
+   unseen(p) ? [p] : tiles(p).filter(t => !mediaOf(p, t) && !t.querySelector('a[href]') && !gone(t))))[0];
  // Khong co gi cho nap: ve cuoi chat. Tin ngoai vung nhin bi ao hoa (rong), tin moi phai nam trong vung nhin.
  if (waiting) waiting.scrollIntoView({block: 'center'});
  else if (items.length) items[items.length - 1].scrollIntoView({block: 'end'});
@@ -130,15 +139,23 @@ MESSAGES_JS = r"""() => {
   const linked = [];
   for (const a of item.querySelectorAll('[data-pel-impression="chat_widget_impression"] a[href]')) {
     if (!/^https?:/.test(a.href) || a.closest('[data-testid^="hatch-chat-attachment-presentation-"]')) continue;
-    const name = (a.querySelector('p[title]') || a).getAttribute('title') || a.innerText.split('\n')[0] || a.href;
-    out.text = (out.text ? out.text + '\n' : '') + name + ': ' + a.href;
-    out.html = (out.html ? out.html + '\n\n' : '') + '🔗 <a href="' + esc(a.href).replace(/"/g, '&quot;') + '">'
-      + esc(name.trim()) + '</a>';
+    const name = ((a.querySelector('p[title]') || a).getAttribute('title') || a.innerText.split('\n')[0] || '').trim();
+    // Link ngoai Muse boc qua trang chuyen huong cua Meta (l.meta.ai/?u=<link that>&h=<ma>, VD bai Threads vua dang):
+    // lay link that, va in ro URL (chi chu gan link an thi tren Telegram trong nhu khong co link). Kiem tra 2026-11-06.
+    let url = a.href;
+    try {
+      const u = new URL(a.href), real = u.searchParams.get('u');
+      if (/^l\./.test(u.hostname) && real && /^https?:/.test(real)) url = real;
+    } catch (e) {}
+    const href = esc(url).replace(/"/g, '&quot;');
+    out.text = (out.text ? out.text + '\n' : '') + (name ? name + ': ' : '') + url;
+    out.html = (out.html ? out.html + '\n\n' : '') + '🔗 ' + (name && name !== url ? '<b>' + esc(name) + '</b>\n' : '')
+      + '<a href="' + href + '">' + esc(url) + '</a>';
     const file = /^https:\/\/muse\.ai\/files\//.test(a.href) ? decodeURIComponent(new URL(a.href).pathname.split('/').pop()) : '';
     const ext = file.split('.').pop().toLowerCase();
     const kind = ['mp4', 'mov', 'webm', 'm4v'].includes(ext) ? 'video'
       : ['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext) ? 'image' : ['mp3', 'wav', 'm4a', 'ogg'].includes(ext) ? 'audio' : '';
-    if (kind) linked.push({kind, src: a.href, title: name.trim(), name: file});
+    if (kind) linked.push({kind, src: a.href, title: name || file, name: file});
   }
   // Video nhung ngay trong than tin (khung bam de xem, data-hatch-video-src = link kho cong khai muse.ai/files/...),
   // khong phai khung dinh kem cuoi tin: VD "Rong Lua — ..." + video ngay duoi. Chu thich = dong chu dam ngay truoc.
@@ -171,17 +188,27 @@ MESSAGES_JS = r"""() => {
             name: (f.path || '').split('/').pop(), mime: f.mime || ''}; };
   // Khung "not found" nhung props van ghi missing: false (VD data.videos[i]): file con, may sandbox dang ngu / khoi dong
   // lai nen chua nap duoc -> lost: false, bot cho + tai lai trang. Kiem tra 2026-11-04.
-  const entries = p => Object.values(presOf(p).data || {}).find(Array.isArray) || [];
-  out.media = presentations(item).flatMap(p => kindOf(p) === 'file' ? [fileOf(p)] : tiles(p).map((t, i) => {
+  const shown = p => tiles(p).map((t, i) => {
     const m = mediaOf(p, t), a = t.querySelector('a[href]');
-    const b = t.matches('[title],[aria-label]') ? t : t.querySelector('[title],[aria-label]');
+    // Tieu de: o chua anh/video (luoi moi nap 1 o thi t = ca khung, o dau tien co the la o chua nap)
+    const own = m && m.closest('[title],[aria-label]');
+    const b = own && p.contains(own) ? own : t.matches('[title],[aria-label]') ? t : t.querySelector('[title],[aria-label]');
     const missing = !m && gone(t), e = entries(p)[i] || {};
     return {kind: missing ? 'missing' : kindOf(p), lost: missing && e.missing !== false,
             src: m ? (m.currentSrc || m.src || '') : (a ? a.href : ''),
             title: kindOf(p) === 'audio' ? (said(p) || '')
               : missing ? (e.label || (e.path || '').split('/').pop() || presOf(p).displayText || '')  // title khung: "Video not found..."
               : b ? (b.getAttribute('title') || b.getAttribute('aria-label') || '') : ''};
-  })).concat(linked);
+  });
+  // O luoi chua nap (xem unseen): them muc src rong (pending) de bot cho / tai lai trang roi gui du, khong gui thieu
+  const withUnseen = p => { const got = shown(p), n = unseen(p);
+    if (!n) return got;
+    const have = new Set(got.map(g => g.title));
+    return got.concat(entries(p).filter(e => !e.label || !have.has(e.label)).slice(0, n).map(e => ({
+      kind: e.missing ? 'missing' : kindOf(p), lost: !!e.missing, src: '', pending: true,
+      title: e.label || (e.path || '').split('/').pop()})));
+  };
+  out.media = presentations(item).flatMap(p => kindOf(p) === 'file' ? [fileOf(p)] : withUnseen(p)).concat(linked);
   return out;
  });
 }"""
