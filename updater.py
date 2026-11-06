@@ -146,6 +146,9 @@ def check(root: Path) -> dict:
                 _git(root, "fetch", "--quiet", "origin", BRANCH)
                 if _is_ancestor(root, remote["sha"], "HEAD"):
                     return out  # ban local da chua commit moi nhat (dang phat trien, di truoc)
+                # GitHub chi them commit merge (vd. merge PR tu nhanh dang dung) -> code khong co gi moi
+                if not _git(root, "rev-list", "--no-merges", f"HEAD..{remote['sha']}"):
+                    return out
             except RuntimeError as e:
                 out["note"] = str(e)
         out["available"] = True
