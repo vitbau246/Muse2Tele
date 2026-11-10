@@ -8,6 +8,8 @@ from ...core import muse_team, post_map, settings, upload_dirs
 from ...interfaces import IProfileManager
 from ..dependencies import get_profile_manager
 from ..schemas.settings import (
+    MuseTeamDetach,
+    MuseTeamReset,
     MuseTeamResponse,
     MuseTeamUpdate,
     PostMapResponse,
@@ -102,7 +104,42 @@ def update_muse_team(
             body.task_lang,
             body.post_mode,
             body.post_profile,
+            body.reset_targets,
+            body.reset_team_data,
         )
+    except muse_team.MuseTeamError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return _team(pm)
+
+
+@router.post("/muse-team/reset", response_model=MuseTeamResponse)
+def reset_muse_team(
+    body: MuseTeamReset, pm: IProfileManager = Depends(get_profile_manager)
+) -> MuseTeamResponse:
+    """Reset the Muse team: every setting back to its default (solo mode), and the bot wipes the
+    Muse data of the listed profiles once and clears the team's tasks, sample videos, scripts and
+    locked character sets. Cannot be undone."""
+    try:
+        muse_team.reset(body.profiles)
+    except muse_team.MuseTeamError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return _team(pm)
+
+
+@router.post("/muse-team/detach", response_model=MuseTeamResponse)
+def detach_muse_team_member(
+    body: MuseTeamDetach, pm: IProfileManager = Depends(get_profile_manager)
+) -> MuseTeamResponse:
+    """Take one member out of the Muse team: it is left out of the team, its role and team setup
+    are dropped, and the bot drops every open task of that Muse (the running one too), then wipes
+    its Muse data (wipe) or tells it it left the team. It joins again when ticked back in."""
+    cfg = muse_team.current()
+    names = [p.name for p in pm.list_profiles()]
+    profile = body.profile.strip()
+    if profile not in names and profile not in cfg.muse_profiles:
+        raise HTTPException(status_code=404, detail=f"Profile not found: {profile}")
+    try:
+        muse_team.detach(profile, body.wipe, names)
     except muse_team.MuseTeamError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     return _team(pm)

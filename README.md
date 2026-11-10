@@ -134,12 +134,14 @@ vào BotFather để đặt `/setcommands`, `/setdescription` hay `/setabouttext
 | `/setup` | Trong nhóm | Gắn nhóm này với bot |
 | `/gan` | Trong topic | Gán topic này với một profile: tên topic trùng tên profile thì gán luôn, không thì bot hiện nút chọn profile. `/gan tên_profile` để gán thẳng. Gán lại thì thay liên kết cũ (mỗi profile 1 topic) |
 | `/kiemtra` | Chat riêng hoặc nhóm | Kiểm tra IP từng profile, cảnh báo IP Việt Nam |
+| `/tach` | Trong topic của 1 Muse thành viên, `/tach tên_profile`, hoặc ở General (bot hiện nút chọn Muse) | **Tách 1 Muse khỏi đội** (chế độ có chỉ huy): chọn *Tách + xoá dữ liệu Muse* hoặc *Tách, giữ dữ liệu*. Bot huỷ mọi việc đang mở của Muse đó (kể cả việc đang làm), bỏ vai trò + ngữ cảnh đội, giới thiệu lại đội cho chỉ huy. Giữ dữ liệu thì bot nhắn Muse bỏ bối cảnh đội khỏi bộ nhớ dài hạn. Không tách được chỉ huy hay thành viên cuối cùng |
 | `/tiendo` | Chat riêng hoặc nhóm | Xem bảng việc của đội Muse (chế độ có chỉ huy) |
 | `/ketqua T8` | Chat riêng hoặc nhóm | Xem ngay ảnh/video kết quả của 1 việc trong đội Muse (kể cả khi chưa đạt) |
 | `/allow_on`, `/allow_off` | Chat riêng hoặc nhóm | Bật / tắt việc bot tự bấm **Allow** khi Muse xin quyền (mặc định bật) |
 | `/reset` | Trong topic của profile (hoặc `/reset tên_profile` ở chat riêng) | **Xoá vĩnh viễn** toàn bộ dữ liệu Muse của profile và toàn bộ tin trong topic, sau khi bạn bấm nút xác nhận. Xong bot đặt tên agent Muse = tên profile |
+| `/reset` | Ở mục **General** (Muse chỉ huy), hoặc `/reset tên_chỉ_huy` | **Reset cả đội**: chọn 1 mẫu ngữ cảnh (lấy từ dashboard → Đội Muse) hoặc *Giữ ngữ cảnh đang có*, bấm xác nhận. Bot xoá dữ liệu Muse của chỉ huy + mọi thành viên, rồi tự gửi lại ngữ cảnh cho từng Muse và giới thiệu lại đội. Đổi mẫu thì bỏ luôn việc, video mẫu, kịch bản chốt (bộ nhân vật khoá cất vào thư mục lưu trữ). Có nút *Chỉ reset chỉ huy* nếu chỉ cần xoá Muse chỉ huy |
 
-Chỉ chủ bot dùng được `/setup`, `/gan`, `/kiemtra`, `/allow_on`, `/allow_off`, `/reset`. Mọi người trong nhóm đều nhắn được cho Muse
+Chỉ chủ bot dùng được `/setup`, `/gan`, `/kiemtra`, `/allow_on`, `/allow_off`, `/reset`, `/tach`. Mọi người trong nhóm đều nhắn được cho Muse
 trong các topic, nên **chỉ thêm người bạn tin tưởng** vào nhóm.
 
 ## Đội Muse: 1 Muse làm chỉ huy
@@ -153,14 +155,28 @@ Mặc định mỗi Muse tự làm trong topic của mình (**Độc lập**). M
    - **Tự động**: việc được gửi đi ngay.
 4. Ở mục **Thành viên và vai trò**: bỏ tick Muse nào không muốn cho vào đội (chỉ huy sẽ không giao việc cho Muse
    đó; profile mới tạo tự vào đội), và ghi **vai trò** từng Muse (vd *viết kịch bản*, *làm ảnh*) để chỉ huy biết giao
-   việc cho ai.
+   việc cho ai. Bỏ tick thì việc Muse đang làm vẫn chạy cho xong; muốn **tách hẳn** 1 Muse thì bấm nút ✂ cạnh tên
+   nó (hoặc gõ `/tach` trên Telegram): áp dụng ngay, không cần Lưu. Bot huỷ mọi việc đang mở của Muse đó, bỏ vai trò
+   và ngữ cảnh đội của nó; tick thêm *Xoá luôn dữ liệu Muse* để Muse không còn nhớ gì của đội (không hoàn tác),
+   không tick thì bot nhắn Muse rằng nó đã rời đội. Muốn cho vào đội lại thì tick lại.
 5. Mục **Duyệt kết quả**: **điểm tối thiểu để đạt** (/10, mặc định 8), số lần làm lại tối đa (3), số phút im lặng
    trước khi bot nhắc Muse (3), báo quá hạn sau (30 phút), số việc mới mỗi giờ (20); **Video nộp từng cái một**
    (mặc định bật); **Gửi cả ảnh/video chưa đạt lên Telegram** (mặc định tắt).
-6. Ô **Xoá dữ liệu Muse khi lưu** (mặc định tick, khuyến nghị): bot xoá sạch dữ liệu Muse (lịch sử chat, file,
-   artifact) của chỉ huy và các Muse trong đội, kèm tin trong topic của chúng, để cả đội bắt đầu sạch không lẫn thông
-   tin cũ. Không hoàn tác; dashboard hỏi xác nhận. Bỏ tick thì chỉ lưu cài đặt, không xoá gì.
+6. Ô **Xoá dữ liệu Muse khi lưu** tự tick khi bạn đổi ngữ cảnh: bot xoá sạch dữ liệu Muse (lịch sử chat, file,
+   artifact, tin trong topic) của đúng các Muse vừa đổi ngữ cảnh rồi mới gửi ngữ cảnh mới, để không lẫn thông tin cũ.
+   Đổi sang mẫu khác thì bot bỏ luôn việc, video mẫu, kịch bản và cất bộ nhân vật khoá cũ. Không đổi ngữ cảnh mà tự
+   tick thì xoá chỉ huy và cả đội. Không hoàn tác; dashboard hỏi xác nhận.
 7. Bấm **Lưu**: bot áp dụng ngay, không cần khởi động lại.
+
+Mục **Ngôn ngữ và ngữ cảnh** có nút mẫu **Phim ngắn gia đình 4 người**: bấm 1 lần là điền cho cả đội. Chỉ huy
+nhận vai **nghiên cứu, phân tích, xây dựng kịch bản chi tiết** (không tự làm video); mọi Muse đang tick nhận vai
+**xây dựng nhân vật và sản xuất video theo kịch bản** (ô vai trò còn trống được điền sẵn). Muse đang có ngữ cảnh
+khác thì dashboard hỏi trước khi thay. Bấm **Lưu** để bot gửi cho các Muse.
+
+Nút **Reset đội** (góc dưới trái hộp Đội Muse, bấm 2 lần để xác nhận) đưa mọi thiết lập về mặc định (Độc lập, bỏ chỉ
+huy, vai trò, ngôn ngữ, ngữ cảnh...) và bot xoá dữ liệu Muse của chỉ huy + các Muse trong đội, bỏ mọi việc, video mẫu,
+kịch bản chốt. Bộ nhân vật khoá và video mẫu cũ không bị xoá mà chuyển vào
+`Videos\downloads\muse_telebot\da_reset\<thời điểm>\` (kèm bản sao state) để lấy lại khi cần.
 
 Sau đó bạn nhắn yêu cầu vào **mục General** của nhóm. Chỉ huy sẽ chia việc và giao cho các Muse. Mỗi việc có mã
 T1, T2...; việc giao đi hiện cả trong topic của Muse nhận việc. Muse làm xong thì bot gửi kết quả (cả ảnh/video) cho
@@ -168,17 +184,39 @@ chỉ huy chấm. Gõ `/tiendo` để xem bảng việc.
 
 - **Duyệt tự động theo điểm:** từ điểm tối thiểu trở lên là đạt; dưới mức đó bot tự gửi điểm và nhận xét cho Muse làm
   lại. Làm lại quá số lần tối đa mà vẫn chưa đạt: bot dừng việc và báo bạn.
+- **Giao cả đội 1 lệnh:** `[[giao: Muse2, Muse3 | ...]]` hoặc `[[giao: cả đội | ...]]` tạo mỗi Muse 1 mã việc, mỗi
+  Muse tự dùng bộ nhân vật của mình.
 - **Video từng cái một:** chỉ huy giao `[[giao: Muse3 | mô tả | 5 video]]` thì Muse làm và nộp đúng 1 video, chỉ huy
   chấm đạt bot mới cho làm video tiếp.
+- **Video dài chia đoạn:** `[[giao: Muse3 | mô tả | 4 đoạn]]` — Muse nộp từng đoạn; đoạn sau bot gửi kèm khung hình
+  cuối của đoạn trước để nối liền; đủ đoạn đạt thì bot tự nối thành 1 video (ffmpeg), gửi vào topic và hỏi đăng.
+- **Bot tự đo video trước khi chuyển chỉ huy:** trùng file đã nộp, không có tiếng, sai khung dọc/ngang, sai thời
+  lượng so với video mẫu → bot trả Muse làm lại ngay (tối đa 2 lần mỗi video, không tính lượt chấm). Báo cáo gửi chỉ
+  huy luôn có dòng "Bot đo: ..." (thời lượng, khung, fps, có tiếng hay không).
 - **Việc chưa đạt chỉ báo bằng chữ:** Telegram chỉ nhận kết quả chữ và số lần chưa đạt; ảnh/video được bot giữ lại gửi
   chỉ huy chấm, đạt mới gửi vào topic của Muse đó. Muốn xem sớm: `/ketqua T8`.
 - **Trang tổng hợp video:** chỉ huy luôn giữ 1 trang artifact "Tổng hợp video" (mã việc, Muse tạo, link tải video,
-  caption, hashtag, điểm, trạng thái, chỉ đạo tiếp) và dựa vào đó để chỉ đạo làm lại hay làm tiếp. Muse làm video phải
-  ghi 3 dòng `Link tải:`, `Caption:`, `Hashtag:` khi nộp; bot trích ra thành "dòng chuẩn" gửi kèm báo cáo để chỉ huy
-  chép đúng vào trang.
+  caption, hashtag, điểm, trạng thái, chỉ đạo tiếp). Muse làm video ghi `Caption:`, `Hashtag:` (và `Link tải:` nếu
+  có) khi nộp; bot trích ra thành "dòng chuẩn" gửi kèm báo cáo để chỉ huy chép đúng vào trang.
 - **Chống lệch thông tin:** chỉ huy nhắc mã việc đã đạt (vd "dùng bộ nhân vật T5") thì bot tự đính kèm ảnh/video và mô
   tả đã duyệt của T5 cho Muse làm, không để chỉ huy tả lại theo trí nhớ. Bot báo cho Muse điểm các việc trước của nó,
-  nhắc Muse 1 lần trước khi báo cáo khi Muse im lặng chưa ghi xong, và bỏ qua điểm chấm trùng.
+  nhắc Muse 1 lần trước khi báo cáo khi Muse im lặng chưa ghi xong, bỏ qua điểm chấm trùng, và bỏ qua tin "Mẹo..."
+  Muse tự gửi (không tính là kết quả).
+- **Làm video theo video mẫu:** dán link video (Facebook, TikTok, YouTube, Instagram, X...) vào General, vd
+  "Làm 1 video giống thế này https://www.facebook.com/share/r/...". Bot tải video về (video dài quá 5 phút hoặc nặng quá 60 MB thì
+  không tải cả video mà lấy 48 khung hình rải đều thẳng từ link, Muse tự quyết định có dùng không), đặt mã **M1**,
+  M2..., cắt khung hình mỗi giây thành ảnh ghép (góc trái ghi giây) rồi gửi kèm cho chỉ huy. Gửi thẳng file video cho
+  chỉ huy cũng được. Chỉ huy đánh giá khả thi (mức A: tới 40 giây, giao 1 video; mức B: 40–150 giây, chia đoạn; mức C:
+  báo bạn trước), viết phân kịch theo từng giây (gồm trang phục, kiểu tóc từng giai đoạn), đổi vai sang nhân vật gia
+  đình, gửi bạn duyệt, rồi chốt `[[kichban: M1 | phân kịch]]` (bot lưu bản v1, v2...) và giao
+  `[[giao: cả đội | Làm video theo video mẫu M1]]`: bot tự đính kèm kịch bản chốt mới nhất, video mẫu, ảnh ghép và
+  ảnh bộ nhân vật cho từng Muse — chỉ huy không phải chép lại kịch bản. Link dán vào topic của 1 Muse cũng được bot
+  tải và gửi kèm như vậy.
+- **Khoá bộ nhân vật:** việc tạo bộ nhân vật được chấm đạt thì bot chép ảnh vào
+  `Videos\downloads\muse_telebot\nhan_vat\<tên Muse>\<mã việc>\` (không bị dọn, mỗi Muse giữ nhiều bộ). Bộ tạo "cho
+  video mẫu M2" được gắn với M2 và kèm cho mọi Muse làm M2; còn lại là bộ chung (gia đình) của Muse đó. Việc theo video
+  mẫu mà chỉ huy không ghi bộ nào: bot kèm bộ gắn với mẫu đó, không có thì bộ chung của chính Muse làm, không có nữa
+  thì bộ chung mới nhất của đội.
 
 Muốn dừng ngay: đổi về **Độc lập** trên dashboard.
 
@@ -257,13 +295,19 @@ Muse2tele\
   Anh của Muse (profile để locale en-US).
 - **Đội Muse (`muse_team.py`, cài ở `muse_telebot\muse_team.json`):** chế độ có chỉ huy thì tin trong General
   đi vào Muse chỉ huy. Bot gửi cho chỉ huy bảng giới thiệu đội và cú pháp lệnh (lần đầu và mỗi khi đội / vai trò
-  đổi). Chỉ huy ra lệnh bằng dòng `[[giao: Muse2 | việc]]`, `[[nhan: T3 | nội dung]]`, `[[lamlai: T3 | cần sửa gì]]`,
+  đổi). Chỉ huy ra lệnh bằng dòng `[[giao: Muse2 | việc]]` (nhiều Muse / `cả đội`, `| 5 video`, `| 4 đoạn`),
+  `[[kichban: M1 | phân kịch]]`, `[[nhan: T3 | nội dung]]`, `[[lamlai: T3 | cần sửa gì]]`,
   `[[danhgia: T3 | 8/10 | nhận xét]]`; Muse làm việc kết thúc bằng `[[xong: T3]]` hoặc `[[vuong: T3 | lý do]]`. Bot
   thực hiện lệnh và ẩn các dòng này khỏi Telegram. Mỗi Muse làm 1 việc một lúc. Muse không ghi `[[xong]]` mà đã rảnh
   và im lặng `quiet_minutes` phút thì bot nhắc 1 lần, vẫn im thì báo cáo. Bảng việc lưu trong `muse_telebot_state.json`
   (`tasks`); file kết quả ở `<MUSE_UPLOAD_DIR>/team/<mã việc>/p<video>r<lần>/` (vòng chưa đạt xoá khi việc đóng, cả
   thư mục xoá sau 7 ngày). Dashboard lưu `reset_id` mới khi chủ tick "Xoá dữ liệu Muse": bot reset Muse của chỉ huy +
-  đội đúng 1 lần cho mỗi mã đó.
+  đội đúng 1 lần cho mỗi mã đó. Nút "Reset đội" lưu thêm `reset_full: true` + `reset_targets`: bot chạy cả khi đã về
+  chế độ Độc lập, reset Muse của `reset_targets` (chỉ profile có topic), xoá `tasks` / `samples` / `scripts` (mã T, M
+  vẫn đánh số tiếp) và chuyển `nhan_vat\` + `mau\` vào `<MUSE_UPLOAD_DIR>/da_reset/<thời điểm>/`. Tách 1 Muse
+  (nút ✂ / `/tach`, API `POST /settings/muse-team/detach`) ghi `detached: {profile: {id, wipe}}` và thêm Muse vào
+  `excluded`: bot huỷ việc đang mở của Muse đó 1 lần cho mỗi `id` (state `team_detached`); `wipe` thì đi qua
+  `reset_targets`, không thì bot gửi Muse tin rời đội (state `team_setup` = `leave:<id>`).
 - **Tên agent:** khi tự tạo topic hoặc `/gan`, nếu agent Muse còn tên mặc định `Muse` thì bot gửi
   `Change your name to <profile>` để tên agent trùng tên profile / topic. Agent đã có tên riêng thì giữ nguyên.
 - `MUSE_UPLOAD_DIR` phải nằm trong `FOXPROFILE_UPLOAD_DIRS`. Không chạy hai bot cùng token (Telegram báo 409).

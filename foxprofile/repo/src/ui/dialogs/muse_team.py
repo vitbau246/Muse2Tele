@@ -7,7 +7,7 @@ import flet as ft
 from ...core import muse_team, post_map
 from ...core.strings import get_string
 from ..theme.colors import COLORS, FONT_BOLD, FONT_SEMIBOLD
-from ..theme.styles import ACCENT_STYLE, DLG_FIELD_KWARGS
+from ..theme.styles import ACCENT_STYLE, DLG_FIELD_KWARGS, ERROR_STYLE, OUTLINE_STYLE
 
 
 def open_muse_team_dialog(
@@ -139,14 +139,97 @@ def open_muse_team_dialog(
         )
         for n in profile_names
     }
-    member_rows = {
-        n: ft.Row(
+    # Tach 1 thanh vien khoi doi (ap dung ngay, khong can Luu): chi Muse dang trong doi theo cai dat da luu
+    detach_panels: dict[str, ft.Container] = {}
+
+    def detach_panel(name: str) -> ft.Container:
+        wipe = ft.Checkbox(
+            value=False,
+            active_color=COLORS["error"],
+            label=get_string("team_detach_wipe"),
+            label_style=ft.TextStyle(size=12.5, color=COLORS["text_sub"]),
+        )
+
+        def go(_: ft.ControlEvent) -> None:
+            try:
+                muse_team.detach(name, bool(wipe.value), profile_names)
+            except muse_team.MuseTeamError as e:
+                error.value = str(e)
+                error.visible = True
+                page.update()
+                return
+            done = get_string("team_detach_done_wipe" if wipe.value else "team_detach_done", name=name)
+            log(done)
+            page.pop_dialog()
+            page.show_dialog(ft.SnackBar(ft.Text(done)))
+
+        def cancel(_: ft.ControlEvent) -> None:
+            panel.visible = False
+            page.update()
+
+        panel = ft.Container(
+            visible=False,
+            padding=ft.Padding.all(10),
+            margin=ft.Margin.only(left=34),
+            border=ft.Border.all(1, COLORS["error"]),
+            border_radius=8,
+            content=ft.Column(
+                spacing=6,
+                tight=True,
+                controls=[
+                    ft.Text(get_string("team_detach_explain", name=name), size=12.5, color=COLORS["text_main"]),
+                    wipe,
+                    ft.Row(
+                        controls=[
+                            ft.Button(
+                                get_string("team_detach_go", name=name),
+                                icon=ft.Icons.CONTENT_CUT,
+                                style=ERROR_STYLE,
+                                on_click=go,
+                            ),
+                            ft.TextButton(
+                                get_string("cancel"),
+                                style=ft.ButtonStyle(color=COLORS["text_sub"]),
+                                on_click=cancel,
+                            ),
+                        ],
+                    ),
+                ],
+            ),
+        )
+        return panel
+
+    def detach_button(name: str) -> ft.Control:
+        if cfg.mode != "chief" or name == cfg.chief or name in cfg.excluded:
+            return ft.Container(width=40)
+        detach_panels[name] = detach_panel(name)
+
+        def toggle(_: ft.ControlEvent) -> None:
+            detach_panels[name].visible = not detach_panels[name].visible
+            page.update()
+
+        return ft.IconButton(
+            ft.Icons.CONTENT_CUT,
+            icon_size=18,
+            icon_color=COLORS["text_sub"],
+            tooltip=get_string("team_detach_hint"),
+            on_click=toggle,
+        )
+
+    member_rows = {}
+    for n, field in role_fields.items():
+        row = ft.Row(
             spacing=4,
             vertical_alignment=ft.CrossAxisAlignment.START,
-            controls=[ft.Container(padding=ft.Padding.only(top=6), content=member_boxes[n]), field],
+            controls=[
+                ft.Container(padding=ft.Padding.only(top=6), content=member_boxes[n]),
+                field,
+                ft.Container(padding=ft.Padding.only(top=4), content=detach_button(n)),
+            ],
         )
-        for n, field in role_fields.items()
-    }
+        member_rows[n] = (
+            ft.Column(spacing=6, tight=True, controls=[row, detach_panels[n]]) if n in detach_panels else row
+        )
     roles_column = ft.Column(spacing=8, tight=True)
 
     # Ngon ngu + ngu canh (bo nho dai han) tung Muse, ca chi huy: bot gui cho Muse 1 lan, sua thi gui lai
@@ -171,8 +254,6 @@ def open_muse_team_dialog(
             visible=False,
             **DLG_FIELD_KWARGS,
         )
-        note = ft.Text("", size=12.5, color=COLORS["error"], visible=False)
-        armed = {"id": ""}  # mau da bam 1 lan khi o ngu canh dang co chu: bam lan 2 moi thay
 
         def label() -> str:
             n = len((context.value or "").strip())
@@ -180,56 +261,30 @@ def open_muse_team_dialog(
 
         def toggle(_: object) -> None:
             context.visible = not context.visible
-            template_row.visible = context.visible
             open_button.icon = (
                 ft.Icons.KEYBOARD_ARROW_UP if context.visible else ft.Icons.KEYBOARD_ARROW_DOWN
             )
             page.update()
 
-        def use(tpl: dict[str, str]) -> None:
-            if (context.value or "").strip() and armed["id"] != tpl["id"]:
-                armed["id"] = tpl["id"]
-                note.value = get_string("team_setup_replace", name=name)
-                note.visible = True
-                page.update()
-                return
-            armed["id"] = ""
-            note.visible = False
-            context.value = tpl["text"]
+        def fill(text: str) -> None:
+            context.value = text
             if lang.value in (None, "-"):
                 lang.value = "vi"
             open_button.content = label()
-            page.update()
 
         def typed(_: object) -> None:
-            armed["id"] = ""
-            note.visible = False
+            disarm_template()
             open_button.content = label()
+            auto_reset()
             page.update()
 
         context.on_change = typed
+        lang.on_select = typed
         open_button = ft.TextButton(
             label(),
             icon=ft.Icons.KEYBOARD_ARROW_DOWN,
             style=ft.ButtonStyle(color=COLORS["sidebar"]),
             on_click=toggle,
-        )
-        template_row = ft.Row(
-            wrap=True,
-            spacing=4,
-            visible=False,
-            controls=[
-                ft.Text(get_string("team_setup_template_pick"), size=12.5, color=COLORS["text_sub"]),
-                *[
-                    ft.TextButton(
-                        tpl["label"],
-                        icon=ft.Icons.AUTO_AWESOME,
-                        style=ft.ButtonStyle(color=COLORS["sidebar"]),
-                        on_click=lambda _, tpl=tpl: use(tpl),
-                    )
-                    for tpl in muse_team.TEMPLATES
-                ],
-            ],
         )
         box = ft.Column(
             spacing=4,
@@ -241,15 +296,74 @@ def open_muse_team_dialog(
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     controls=[lang, open_button],
                 ),
-                template_row,
-                note,
                 context,
             ],
         )
-        return {"head": head, "lang": lang, "context": context, "box": box}
+        return {"head": head, "lang": lang, "context": context, "box": box, "fill": fill}
 
     setups = {n: setup_panel(n) for n in names}
     setup_column = ft.Column(spacing=12, tight=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
+
+    # Mau ca doi: 1 lan bam dien ngu canh chi huy cho chi huy, ngu canh thanh vien cho moi Muse dang tick (va vai tro
+    # con trong). Co Muse dang co ngu canh khac mau: bam lan 1 hien canh bao, bam lan 2 moi thay.
+    template_armed = {"id": ""}
+    template_used = {"id": ""}  # mau da dien trong lan mo nay: luu thi bot lam moi ca du lieu doi
+    template_note = ft.Text("", size=12.5, color=COLORS["error"], visible=False)
+
+    def team_now() -> tuple[str, list[str]]:
+        lead = chief_dropdown.value or ""
+        return lead, [n for n in profile_names if n != lead and member_boxes[n].value]
+
+    def disarm_template() -> None:
+        template_armed["id"] = ""
+        template_note.visible = False
+
+    def use_template(tpl: dict[str, str]) -> None:
+        lead, members = team_now()
+        want = ({lead: tpl["chief"]} if lead in setups else {}) | {
+            n: tpl["member"] for n in members if n in setups
+        }
+        busy = [
+            n for n, text in want.items()
+            if (setups[n]["context"].value or "").strip() not in ("", text.strip())
+        ]
+        if busy and template_armed["id"] != tpl["id"]:
+            template_armed["id"] = tpl["id"]
+            template_note.value = get_string("team_setup_replace", names=", ".join(busy))
+            template_note.visible = True
+            page.update()
+            return
+        disarm_template()
+        for n, text in want.items():
+            setups[n]["fill"](text)
+        for n in members:
+            if tpl.get("member_role") and not (role_fields[n].value or "").strip():
+                role_fields[n].value = tpl["member_role"]
+        template_used["id"] = tpl["id"]
+        auto_reset()
+        page.update()
+
+    template_row = ft.Column(
+        spacing=2,
+        tight=True,
+        controls=[
+            ft.Text(get_string("team_setup_template_pick"), size=12.5, color=COLORS["text_sub"]),
+            ft.Row(
+                wrap=True,
+                spacing=4,
+                controls=[
+                    ft.Button(
+                        tpl["label"],
+                        icon=ft.Icons.AUTO_AWESOME,
+                        style=OUTLINE_STYLE,
+                        on_click=lambda _, tpl=tpl: use_template(tpl),
+                    )
+                    for tpl in muse_team.TEMPLATES
+                ],
+            ),
+            template_note,
+        ],
+    )
     roles_none = ft.Text(get_string("team_roles_none"), size=12.5, color=COLORS["text_dim"])
     # Review settings: key -> (label key, hint key or "")
     number_specs = {
@@ -305,8 +419,40 @@ def open_muse_team_dialog(
     show_failed_box, show_failed_row = tick(
         cfg.show_failed_media, get_string("team_show_failed"), get_string("team_show_failed_explain")
     )
-    reset_box, reset_row = tick(True, get_string("team_reset"), get_string("team_reset_explain"))
+    # Xoa du lieu Muse khi luu: tu tick khi doi ngu canh (chi xoa cac Muse doi ngu canh, roi bot gui ngu canh moi);
+    # chu tu bam o nay thi thoi tu dong. Doi mau: bot bo ca viec, video mau, kich ban, cat bo nhan vat cu.
+    reset_box, reset_row = tick(False, get_string("team_reset"), get_string("team_reset_explain"))
+    reset_note = ft.Text("", size=12.5, color=COLORS["text_sub"], visible=False)
+    reset_manual = {"on": False}
     reset_warning = ft.Text("", size=12.5, color=COLORS["error"], visible=False)
+
+    def changed_setup() -> list[str]:
+        """Muse trong doi (chi huy + thanh vien dang tick) co ngon ngu / ngu canh khac ban da luu."""
+        lead, members = team_now()
+        out = []
+        for n in ([lead] if lead else []) + members:
+            if n not in setups:
+                continue
+            old = cfg.setup.get(n, {})
+            now = ((setups[n]["lang"].value or "").strip("-"), (setups[n]["context"].value or "").strip())
+            if now != (old.get("lang", ""), old.get("context", "").strip()):
+                out.append(n)
+        return out
+
+    def reset_plan() -> tuple[list[str], bool]:
+        """(Muse se xoa -- [] = chi huy + ca doi, co lam moi du lieu doi khong)."""
+        return changed_setup(), bool(template_used["id"])
+
+    def auto_reset() -> None:
+        targets, full = reset_plan()
+        if not reset_manual["on"]:
+            reset_box.value = bool(targets or full)
+        lead, members = team_now()
+        names = ", ".join(targets or ([lead] if lead else []) + members)
+        reset_note.value = get_string("team_reset_who", names=names or "-") + (
+            " " + get_string("team_reset_template") if full else ""
+        )
+        reset_note.visible = bool(reset_box.value)
     confirmed = {"names": ""}  # reset da xac nhan cho dung danh sach nay (bam Luu lan 2)
 
     def section(label: str, *body: ft.Control) -> ft.Column:
@@ -350,6 +496,7 @@ def open_muse_team_dialog(
             section(
                 get_string("team_setup_label"),
                 ft.Text(get_string("team_setup_explain"), size=12.5, color=COLORS["text_sub"]),
+                template_row,
                 setup_column,
             ),
             section(
@@ -367,6 +514,7 @@ def open_muse_team_dialog(
                 show_failed_row,
             ),
             ft.Container(padding=ft.Padding.only(top=10), content=reset_row),
+            reset_note,
             reset_warning,
         ],
     )
@@ -387,18 +535,76 @@ def open_muse_team_dialog(
         for n in shown:
             setups[n]["head"].value = get_string("team_setup_chief", name=n) if n == lead else n
         setup_column.controls = [setups[n]["box"] for n in shown]
-        # doi lua chon thi phai xac nhan xoa du lieu lai tu dau
+        # doi lua chon thi phai xac nhan xoa du lieu / reset doi lai tu dau
         confirmed["names"] = ""
         reset_warning.visible = False
         save_button.content = get_string("save_changes")
+        disarm_full_reset()
+        disarm_template()
+        auto_reset()
         page.update()
+
+    def reset_ticked(e: object) -> None:
+        reset_manual["on"] = True  # chu da tu chon: khong tu tick / bo tick nua
+        sync(e)
 
     mode_group.on_change = sync
     post_profile.on_select = sync
     chief_dropdown.on_select = sync
-    reset_box.on_change = sync
+    reset_box.on_change = reset_ticked
     for box in member_boxes.values():
         box.on_change = sync
+
+    # Reset doi: moi thiet lap ve mac dinh + bot xoa du lieu Muse cua chi huy va ca doi. Bam lan 1 hien canh
+    # bao (nut doi thanh mau do), bam lan 2 moi reset; doi bat ky lua chon nao thi phai bam lai tu dau.
+    full_armed = {"names": None}
+    full_warning = ft.Text("", size=12.5, color=COLORS["error"], visible=False)
+
+    def reset_names() -> list[str]:
+        lead = chief_dropdown.value or ""
+        team = ([lead] if lead else []) + [
+            n for n in profile_names if n != lead and member_boxes[n].value
+        ]
+        # chi Muse bot dang chay (co topic); bot chua chay lan nao thi lay ca doi
+        return [n for n in team if n in cfg.muse_profiles] if cfg.muse_profiles else team
+
+    def disarm_full_reset() -> None:
+        full_armed["names"] = None
+        full_warning.visible = False
+        full_reset_button.content = get_string("team_full_reset")
+        full_reset_button.style = OUTLINE_STYLE
+
+    def on_full_reset(_: ft.ControlEvent) -> None:
+        targets = reset_names()
+        names = ", ".join(targets) or get_string("team_full_reset_none")
+        if full_armed["names"] != names:
+            full_armed["names"] = names
+            full_warning.value = get_string("team_full_reset_confirm", names=names)
+            full_warning.visible = True
+            full_reset_button.content = get_string("team_full_reset_go")
+            full_reset_button.style = ERROR_STYLE
+            page.update()
+            return
+        try:
+            muse_team.reset(targets)
+        except muse_team.MuseTeamError as e:
+            error.value = str(e)
+            error.visible = True
+            disarm_full_reset()
+            page.update()
+            return
+        done = get_string("team_full_reset_done", names=names)
+        log(done)
+        page.pop_dialog()
+        page.show_dialog(ft.SnackBar(ft.Text(done)))
+
+    full_reset_button = ft.Button(
+        get_string("team_full_reset"),
+        icon=ft.Icons.RESTART_ALT,
+        style=OUTLINE_STYLE,
+        tooltip=get_string("team_full_reset_hint"),
+        on_click=on_full_reset,
+    )
 
     def on_save(_: ft.ControlEvent) -> None:
         error.visible = False
@@ -447,14 +653,17 @@ def open_muse_team_dialog(
         params["one_video"] = bool(one_video_box.value)
         params["show_failed_media"] = bool(show_failed_box.value)
         wipe = mode == "chief" and bool(reset_box.value)
+        targets, full = reset_plan()
         if wipe:
-            team = [chief_dropdown.value or ""] + [
+            team = targets or [chief_dropdown.value or ""] + [
                 n for n in others if member_boxes[n].value
             ]
             names = ", ".join(team)
             if confirmed["names"] != names:  # bam Luu lan 1: hien canh bao, lan 2 moi xoa
                 confirmed["names"] = names
-                reset_warning.value = get_string("team_reset_confirm", names=names)
+                reset_warning.value = get_string("team_reset_confirm", names=names) + (
+                    " " + get_string("team_reset_template") if full else ""
+                )
                 reset_warning.visible = True
                 save_button.content = get_string("team_reset_go")
                 page.update()
@@ -472,6 +681,8 @@ def open_muse_team_dialog(
                 (task_lang.value or "").strip("-"),
                 post_group.value or "ask",
                 "" if (post_profile.value or "-") == "-" else post_profile.value,
+                targets if wipe else None,
+                wipe and full,
             )
         except muse_team.MuseTeamError as e:
             error.value = str(e)
@@ -526,12 +737,26 @@ def open_muse_team_dialog(
             ),
         ),
         actions=[
-            ft.TextButton(
-                get_string("cancel"),
-                style=ft.ButtonStyle(color=COLORS["text_sub"]),
-                on_click=lambda _: page.pop_dialog(),
+            ft.Column(
+                spacing=8,
+                tight=True,
+                horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+                controls=[
+                    full_warning,
+                    ft.Row(
+                        controls=[
+                            full_reset_button,
+                            ft.Container(expand=True),
+                            ft.TextButton(
+                                get_string("cancel"),
+                                style=ft.ButtonStyle(color=COLORS["text_sub"]),
+                                on_click=lambda _: page.pop_dialog(),
+                            ),
+                            save_button,
+                        ],
+                    ),
+                ],
             ),
-            save_button,
         ],
     )
     page.show_dialog(dlg)
