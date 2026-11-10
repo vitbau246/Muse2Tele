@@ -11,6 +11,11 @@ Bot Telegram <-> muse.ai qua FoxProfile.
     nut bam; bam nut thi lua chon duoc gui lai vao Muse.
   - /reset (chu bot): bam nut xac nhan -> xoa toan bo du lieu Muse cua profile (Settings -> Data controls -> Reset
     <ten agent>, bot tu doc ten agent), xoa topic cu, tao topic moi cung ten, dat ten agent = ten profile.
+    /reset o muc General (Muse chi huy) / "/reset <chi huy>": reset CA DOI -- chon mau ngu canh (lay tu dashboard) hoac
+    giu ngu canh dang co; bot luu qua API dashboard (reset_data) roi tu xoa + gui lai ngu canh (ask_team_reset).
+  - /tach (chu bot, che do co chi huy): trong topic 1 Muse thanh vien / "/tach <ten>" / o General chon tu danh sach ->
+    tach Muse khoi doi (API dashboard /settings/muse-team/detach), chon xoa du lieu Muse hoac giu (bot nhan Muse bo boi
+    canh doi). Bot huy moi viec dang mo cua Muse do (team_detach), gioi thieu lai doi cho chi huy.
   - Ten agent: agent con ten mac dinh "Muse" thi khi tao topic / /gan bot gui "Change your name to <profile>".
   - Khoi dong / /start: bot kiem tra tung buoc cau hinh va huong dan nguoi dung; canh bao profile dung IP Viet Nam.
 
@@ -24,6 +29,7 @@ Doi Muse (1 Muse chi huy o muc General giao viec cho cac Muse khac): xem muse_te
 """
 
 import ctypes
+import hashlib
 import html
 import io
 import json
@@ -51,6 +57,7 @@ from telebot.apihelper import ApiTelegramException
 import muse_auto
 import muse_sync
 import muse_team
+import video_sample
 from muse_sync import HERE
 
 TITLE = "Muse2tele_Bot"
@@ -64,6 +71,10 @@ TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
 UPLOAD_DIR = (HERE / os.environ.get("MUSE_UPLOAD_DIR", str(ROOT / "Videos" / "downloads" / "muse_telebot"))).resolve()
 STATE_FILE = HERE / "muse_telebot_state.json"
 TG_DOWNLOAD_LIMIT = 20 * 1024 * 1024  # getFile cua Bot API
+TG_FETCH_TIMEOUT = (15, 60)  # (ket noi, moi lan doc) khi tai file tu Telegram
+TG_FETCH_TOTAL_SECONDS = 300
+TG_FETCH_ATTEMPTS = 3
+RESEND_DIR = UPLOAD_DIR / "gui_lai"  # ban sao file cua tin cuoi gui vao tung Muse (doi soat gui lai kem file)
 TG_UPLOAD_LIMIT = 50 * 1024 * 1024  # gui file qua Bot API
 MEDIA_UPLOAD_TIMEOUT = 300
 MEDIA_UPLOAD_ATTEMPTS = 2
@@ -82,6 +93,11 @@ DELIVERED_KEEP = 200
 MEDIA_RELOAD_SECONDS = 20
 MEDIA_RELOAD_GAP = 90
 MEDIA_MISSING_WAIT = 240
+# Muse hay hien 1 file o 2 tin (VD tin tra loi nhung video + tin rieng chi co khung dinh kem cung file, Muse8
+# 2026-11-10): cung noi dung trong 1 chat trong chung nay giay chi chuyen 1 lan
+MEDIA_DEDUP_SECONDS = 1800
+MEDIA_DEDUP_KEEP = 50
+UNRENDERED_WAIT = 60  # tin Muse chua render (khung rong): cho toi da chung nay giay roi bo qua
 TOPICS_CHECK_SECONDS = 30  # quet profile moi dang nhap Muse
 IP_CHECK_SECONDS = 6 * 3600  # kiem tra lai IP cac profile
 UPDATE_CHECK_SECONDS = 6 * 3600  # hoi FoxProfile co ban Muse2Tele moi tren GitHub khong
@@ -91,6 +107,8 @@ WATCH_HANG_SECONDS = 180
 MUSE_DOWN_TEXT = "⏳ Muse đang gặp lỗi, bot sẽ tự gửi lại tin này khi Muse hoạt động trở lại."
 CHOSEN_DATA = "muse_bridge_chosen"
 RESET_DATA = "muse_reset:"  # + "go:<profile>" / "no"
+DETACH_DATA = "tdetach:"  # + "ask:<profile>" (chon tu danh sach) / "w:<profile>" (tach + xoa) / "k:<profile>" / "no"
+TEAM_RESET_DATA = "treset:"  # + "t:<mau>" / "keep" / "chief" / "no"; xac nhan: "go:t:<mau>" / "go:keep"
 LINK_DATA = "muse_link:"  # + "<profile>" / "" (huy): nut chon profile cua /gan
 BUTTONS_RE = re.compile(r"\[\[\s*(?:nút|nut|buttons?)\s*:\s*(.+?)\s*\]\]", re.IGNORECASE | re.DOTALL)
 KIND_LABEL = {"image": "ảnh", "video": "video"}
@@ -118,7 +136,7 @@ profile_queues_lock = threading.Lock()
 busy_keys = set()  # profile dang xu ly 1 lenh (profile_worker): doi soat bo qua
 relays = {}
 relay_lock = threading.Lock()
-state_lock = threading.Lock()
+state_lock = threading.RLock()  # update_state giu khoa trong khi goi load_state / save_state
 stalled = {}
 stalled_lock = threading.Lock()
 ip_results = {}  # profile -> (ip, quoc gia, la VN)
@@ -127,17 +145,44 @@ ip_warned = {}  # profile -> luc canh bao IP VN gan nhat
 
 # ---------- trang thai ----------
 
+# Windows: os.replace / doc file loi "Access is denied" (WinError 5) khi dung luc do 1 luong / chuong trinh khac
+# (antivirus, script doc state...) dang mo file (2026-11-07: "Loi xu ly tin: PermissionError ... state.tmp ->
+# state.json"). Doc / ghi trong bot di qua state_lock (RLock) nen khong tu dung nhau; voi chuong trinh ngoai: thu lai.
+STATE_IO_SECONDS = 10
+STATE_IO_PAUSE = 0.03
+
+
+def _state_io(action):
+    deadline = time.time() + STATE_IO_SECONDS
+    while True:
+        try:
+            return action()
+        except PermissionError:
+            if time.time() >= deadline:
+                raise
+            time.sleep(STATE_IO_PAUSE)
+
+
 def load_state():
-    try:
-        return json.loads(STATE_FILE.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
+    """Trang thai bot. Chua co file: {}. File dang bi khoa qua lau: bao loi (KHONG tra {} -- update_state se ghi de
+    mat het trang thai)."""
+    with state_lock:
+        try:
+            text = _state_io(lambda: STATE_FILE.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return {}
+        try:
+            return json.loads(text)
+        except ValueError:
+            logger.error(f"{STATE_FILE.name} hong (khong phai JSON), bat dau trang thai moi")
+            return {}
 
 
 def save_state(state):
-    tmp = STATE_FILE.with_suffix(".tmp")
-    tmp.write_text(json.dumps(state, indent=1, ensure_ascii=False), encoding="utf-8")
-    os.replace(tmp, STATE_FILE)
+    with state_lock:
+        tmp = STATE_FILE.with_suffix(".tmp")
+        _state_io(lambda: tmp.write_text(json.dumps(state, indent=1, ensure_ascii=False), encoding="utf-8"))
+        _state_io(lambda: os.replace(tmp, STATE_FILE))
 
 
 def update_state(change):
@@ -247,8 +292,38 @@ def download(m, folder):
         name += Path(info.file_path).suffix
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / name
-    path.write_bytes(bot.download_file(info.file_path))
+    tg_fetch(info.file_path, path)
     return str(path)
+
+
+def tg_fetch(file_path, dest):
+    """Tai file tu Telegram, co gioi han thoi gian va thu lai. bot.download_file cua telebot goi requests KHONG co
+    timeout: 2026-11-09 09:01 mang Telegram chap chon, tai video cho Muse8 treo mai, ca hang doi Muse8 dung tu do."""
+    url = f"https://api.telegram.org/file/bot{TOKEN}/{file_path}"
+    last = None
+    for attempt in range(TG_FETCH_ATTEMPTS):
+        if attempt:
+            time.sleep(3 * attempt)
+        tmp = dest.with_name(dest.name + ".part")
+        try:
+            deadline = time.time() + TG_FETCH_TOTAL_SECONDS
+            with requests.get(url, stream=True, timeout=TG_FETCH_TIMEOUT) as r:
+                if r.status_code != 200:
+                    last = f"HTTP {r.status_code}"
+                    continue
+                with open(tmp, "wb") as f:
+                    for chunk in r.iter_content(1 << 16):
+                        if time.time() > deadline:
+                            raise TimeoutError(f"quá {TG_FETCH_TOTAL_SECONDS}s chưa tải xong")
+                        f.write(chunk)
+            os.replace(tmp, dest)
+            return
+        except (requests.RequestException, TimeoutError, OSError) as e:
+            last = f"{type(e).__name__}: {(str(e).replace(TOKEN, '***') if TOKEN else str(e))[:200]}"
+            logger.warning(f"Tai file Telegram lan {attempt + 1}/{TG_FETCH_ATTEMPTS} loi: {last}")
+        finally:
+            Path(tmp).unlink(missing_ok=True)
+    raise RuntimeError(f"tải từ Telegram lỗi sau {TG_FETCH_ATTEMPTS} lần ({last})")
 
 
 def with_reply_context(m, text):
@@ -289,6 +364,16 @@ def process(batch, retry=False):
                     files.append(path)
             except Exception as e:
                 errors.append(f"{j['m'].content_type}: {e}")
+        if errors:  # thieu file: khong gui rieng phan chu (Muse se tra loi "chua thay video"), bao chu gui lai
+            logger.warning(f"Msg {first.message_id} -> {chat['key']}: khong tai duoc file, khong gui: {errors}")
+            for j in batch:
+                react(j["m"], "👎")
+            safe_reply(first, "⚠️ Bot không tải được file từ Telegram nên CHƯA gửi gì cho Muse:\n"
+                              + "\n".join(errors) + "\nBạn gửi lại tin này (kèm file) giúp nhé.")
+            return True
+        if not tap:  # link video (Facebook / TikTok...) / file video gui chi huy: tai ve thanh video mau M<n>
+            note, extra = attach_samples(batch, chat, text, files)
+            text, files = ((text + "\n\n" + note).strip() if note else text), files + extra
         if files or text.strip():
             base = batch[0].setdefault("base", set())
             ok, result = muse_sync.send(chat, text, files, seen=seen, base=base)
@@ -300,8 +385,8 @@ def process(batch, retry=False):
                        f"FoxProfile và bot. Gõ /start để bot tự kiểm tra lại.")
         else:
             ok, result = False, "không có gì để gửi"
-        if errors:
-            ok, result = False, f"{result}\nKhông tải được: " + "; ".join(errors)
+        if ok:
+            remember_sent(chat, first, text, files, seen)  # truoc khi xoa folder: giu ban sao file de gui lai
     finally:
         shutil.rmtree(folder, ignore_errors=True)
     logger.info(f"Msg {first.message_id} -> {chat['key']}: {result}")
@@ -315,16 +400,86 @@ def process(batch, retry=False):
     if ok:
         if retry:
             safe_reply(first, "✅ Muse đã hoạt động lại, tin này đã được gửi.")
-        remember_sent(chat, first, text)
         relay(chat, first, seen)
         return True
     safe_reply(first, f"⚠️ Chưa gửi được cho Muse: {result}")
     return True
 
 
-def remember_sent(chat, m, text):
-    """Ghi tin cuoi da gui vao Muse de doi soat (reconcile_loop kiem tra no con tren Muse khong)."""
-    entry = {"mid": m.message_id, "chat_id": m.chat.id, "topic": topic_of(m), "text": text,
+def attach_samples(batch, chat, text, files):
+    """Link video trong tin (moi chat) va file video chu gui chi huy: bot tai / chep thanh video mau M<n> (video_sample.py),
+    lam anh ghep khung hinh. Tra ve (doan chu noi them vao tin, file dinh kem them). Ket qua giu trong batch: gui lai
+    tin (Muse tam loi) khong tai lai."""
+    if batch[0].get("samples") is not None:
+        return batch[0]["samples"]
+    first, is_chief = batch[0]["m"], chat["key"] == muse_team.chief()
+    links = video_sample.find_links(text)
+    sources = [(url, None) for url in links] + [(None, f) for f in files if is_chief and muse_team.is_video(f)]
+    notes, extra = [], []
+    for url, video_file in sources:
+        def alloc(state):
+            state["sample_seq"] = state.get("sample_seq", 0) + 1
+            return f"M{state['sample_seq']}"
+        sid = update_state(alloc)
+        folder = UPLOAD_DIR / "mau" / sid
+        try:
+            sample = video_sample.build(sid, folder, url=url or "", video_file=video_file)
+        except Exception as e:
+            shutil.rmtree(folder, ignore_errors=True)
+            reason = str(e) if isinstance(e, video_sample.SampleError) else f"{type(e).__name__}: {e}"
+            logger.warning(f"Video mau {sid} ({url or video_file}) loi: {reason}")
+            if url:
+                notes.append(f"[Bot: không tải được video từ link {url} ({reason}). Đừng đoán nội dung video; "
+                             f"nhờ chủ gửi thẳng file video.]")
+                safe_reply(first, f"⚠️ Không tải được video từ link: {reason}\n"
+                                  f"Gửi thẳng file video (dưới 20 MB) nếu muốn Muse xem video này.")
+            continue
+        update_state(lambda s, x=sample: video_sample.register(s, x))
+        n = len(sample["sheets"])
+        logger.info(f"Video mau {sid}: {url or video_file} -> {sample['video']} ({n} anh ghep)")
+        notes.append(video_sample.describe(sample, is_chief))
+        # file chu gui da nam trong files: chi them anh ghep; link: them ca video
+        extra += sample["sheets"] if video_file else video_sample.files(sample, 1 + n)
+        meta = sample["meta"]
+        if meta.get("no_video"):
+            head = (f"🎬 Video mẫu {sid}: video dài"
+                    + (f" {video_sample.clock(meta['duration'])}" if meta.get("duration") else "")
+                    + " / nặng nên bot không tải cả video, chỉ gửi Muse thông tin"
+                    + (f" + {n} ảnh ghép khung hình rải đều cả video" if n else "")
+                    + " để Muse tự quyết định.")
+        else:
+            head = (f"🎬 Video mẫu {sid}: đã tải"
+                    + (f", {meta['duration']:.0f} giây" if meta.get("duration") else "")
+                    + (f", {n} ảnh ghép khung hình" if n else "") + ". Gửi kèm cho Muse.")
+        safe_reply(first, head
+                          + (f" Chỉ huy giao việc \"theo video mẫu {sid}\" thì bot gửi kèm cho Muse làm." if is_chief
+                             else ""))
+    batch[0]["samples"] = ("\n\n".join(notes), extra)
+    return batch[0]["samples"]
+
+
+def remember_sent(chat, m, text, files=(), seen=()):
+    """Ghi tin cuoi da gui vao Muse de doi soat (reconcile_loop kiem tra no con tren Muse khong). File tai tu Telegram
+    (thu muc tam, xoa ngay sau khi gui) duoc chep vao RESEND_DIR/<profile>/ de doi soat gui lai CA file: 2026-11-09
+    tin video cho Muse8 hien roi mat, ban gui lai chi co chu -> Muse8 tra loi "chua thay video dinh kem".
+    prior: id cac tin co tren Muse truoc khi gui (tin chi co file, khong co chu: nhan ra bang tin nguoi dung moi)."""
+    keep = RESEND_DIR / chat["key"]
+    kept = []
+    try:
+        shutil.rmtree(keep, ignore_errors=True)
+        for f in files:
+            src = Path(f)
+            if UPLOAD_DIR / "mau" in src.parents or not src.is_file():  # video mau: da luu co dinh, khong chep
+                kept.append(str(src))
+                continue
+            keep.mkdir(parents=True, exist_ok=True)
+            dst = keep / src.name
+            shutil.copy2(src, dst)
+            kept.append(str(dst))
+    except OSError as e:
+        logger.warning(f"{chat['key']}: khong giu duoc file de doi soat gui lai: {e}")
+    entry = {"mid": m.message_id, "chat_id": m.chat.id, "topic": topic_of(m), "text": text, "files": kept,
+             "media": muse_sync.has_media(kept), "prior": sorted(seen) if kept else [],
              "at": time.time(), "verified": False, "resends": 0}
     update_state(lambda s: s.setdefault("last_sent", {}).__setitem__(chat["key"], entry))
 
@@ -567,11 +722,11 @@ def send_media(target, kind, data, name, caption):
                 logger.warning(f"Tai {name} len Telegram loi ({e}), thu lai")
     if kind == "video":
         return upload(bot.send_video, supports_streaming=True)
-    if kind == "image":
+    if kind in ("image", "audio"):
         try:
-            return upload(bot.send_photo)
+            return upload(bot.send_photo) if kind == "image" else upload(bot.send_audio)
         except ApiTelegramException as e:
-            logger.info(f"send_photo {name}: {e}; gui dang file")
+            logger.info(f"send {kind} {name}: {e}; gui dang file")
     return upload(bot.send_document)
 
 
@@ -582,6 +737,9 @@ def send_reply(fox, msg, target, key, chat=None):
     text, kb = msg.get("html") or html.escape(msg["text"]), None
     # Doi Muse: lenh [[...]] cua chi huy / Muse dang lam viec duoc thuc hien va an khoi Telegram
     role, cmds = team_role(key), []
+    if role == "worker" and muse_team.is_noise(msg["text"]):  # meo / quang cao tinh nang Muse tu gui: khong la ket qua
+        logger.info(f"{key}: tin Muse tu gui (meo / gioi thieu), khong tinh vao bao cao viec")
+        role = None
     # Muse dang lam viec cho doi: anh / video chua duoc chi huy duyet thi giu lai (gui chi huy cham), khong len Telegram
     hold = role == "worker" and not muse_team.config()["show_failed_media"]
     held_tid, held_kept, held_dropped = None, 0, {}
@@ -609,10 +767,13 @@ def send_reply(fox, msg, target, key, chat=None):
         if role == "chief" and cmds:
             team_chief_commands(cmds)
     for a in msg["media"]:
-        kind = a["kind"] if a["kind"] in KIND_LABEL else "file"
+        digest = None
+        kind = a["kind"] if a["kind"] in KIND_LABEL or a["kind"] == "audio" else "file"
         title = re.sub(r"^Open (?:generated|animated) (?:image|video)\s*", "", a["title"]).strip()
         base = re.sub(r'[\\/:*?"<>|\s]+', "_", title)[:60] or f"muse_{kind}"
-        if not a["src"] and a["kind"] != "file":
+        # Audio Muse khong co src: bot bam Play de Muse nap file (muse_sync.fetch_audio), can vi tri khung (pos)
+        grab_audio = kind == "audio" and not a["src"] and a.get("pos") is not None
+        if not a["src"] and a["kind"] != "file" and not grab_audio:
             logger.info(f"{key}: khong tai duoc {a['kind']} {title!r} (lost={a.get('lost')})")
             if a["kind"] == "missing":
                 why = ("Muse không còn file này" if a.get("lost")
@@ -628,11 +789,22 @@ def send_reply(fox, msg, target, key, chat=None):
                 if content is None:
                     raise ValueError("khung xem file cua Muse khong co noi dung chu")
                 data, mime = content.encode("utf-8"), a.get("mime") or "text/plain"
+            elif grab_audio:
+                data, mime = muse_sync.fetch_audio(fox, msg["id"], a["pos"], a.get("size") or 0,
+                                                   a.get("path") or "", a.get("preview") or "")
+                mime = mime or a.get("mime") or "audio/mpeg"
             else:
                 data, mime = muse_sync.fetch_media(fox, a["src"])
             if kind == "video" and not mime.startswith("video/"):
                 raise ValueError(f"tai ve {mime or 'rong'} ({len(data)} byte), khong phai video")
-            name = re.sub(r'[\\/:*?"<>|\s]+', "_", a.get("name") or "") or base + (mimetypes.guess_extension(mime) or "")
+            name = re.sub(r'[\\/:*?"<>|\s]+', "_", a.get("name") or "")
+            if not name:  # tieu de da co duoi dung loai (VD "abc.mp4"): khong them lan nua ("abc.mp4.mp4")
+                same = mimetypes.guess_type(base)[0] == (mime or "").split(";")[0].strip()
+                name = base if same else base + (mimetypes.guess_extension(mime) or "")
+            digest = hashlib.md5(data).hexdigest()
+            if not claim_media(key, digest):
+                logger.info(f"{key}: {kind} {name} ({len(data) // 1024} KB) trung file vua chuyen, bo qua")
+                continue
             if role == "worker":
                 tid, why = team_capture_file(key, data, name)
                 if hold and tid and why != "big":  # qua lon de dua chi huy: van gui len Telegram
@@ -647,6 +819,8 @@ def send_reply(fox, msg, target, key, chat=None):
             logger.info(f"{key}: da gui {kind} {name} ({len(data) // 1024} KB) ve TG")
             del data
         except Exception as e:
+            if digest and not isinstance(e, TooLarge):  # chua toi Telegram: ban trung sau (neu co) van duoc thu gui
+                release_media(key, digest)
             if kind == "video" and isinstance(e, (TooLarge, requests.RequestException, ApiTelegramException)):
                 why = str(e) if isinstance(e, TooLarge) else "lỗi mạng khi tải lên Telegram"
                 logger.warning(f"{key}: video {title or base} khong gui duoc ({e})")
@@ -662,7 +836,7 @@ def send_reply(fox, msg, target, key, chat=None):
                 continue
             logger.exception(f"Khong chuyen duoc {kind} {title or a['src']} ve Telegram")
             try:
-                send_text(target, f"⚠️ Không gửi được {KIND_LABEL.get(kind, 'file')} "
+                send_text(target, f"⚠️ Không gửi được {KIND_LABEL.get(kind, 'audio' if kind == 'audio' else 'file')} "
                                   f"<b>{html.escape(title or base)}</b>: {html.escape(type(e).__name__)}")
             except Exception:
                 logger.exception("Khong bao duoc loi gui file")
@@ -702,6 +876,11 @@ def deliver_new(fox, chat, r, target, busy):
             return True
         if not msg["text"] and not msg["media"] and not msg.get("choices"):
             if busy:
+                return True
+            # Tin chua render (ao hoa ngoai vung nhin, VD the Space): cuon toi no, vong sau doc lai
+            if msg.get("unrendered") and \
+                    time.time() - r["waiting"].setdefault(msg["id"], time.time()) < UNRENDERED_WAIT:
+                muse_sync.scroll_to(fox, msg["id"])
                 return True
             r["seen"].add(msg["id"])
             continue
@@ -760,6 +939,32 @@ def relay_loop(chat, r):
         else:
             why = f"không đọc được trả lời của Muse ({error})" if errors else "Muse vẫn đang làm"
             safe_reply(m, f"⏳ {why} sau {minutes} phút, bot ngừng chờ. Câu trả lời đến sau vẫn sẽ được gửi về đây.")
+
+
+def claim_media(key, digest):
+    """Ghi nhan file (md5 noi dung) sap chuyen ve Telegram tu chat key. False neu cung file vua chuyen trong
+    MEDIA_DEDUP_SECONDS (Muse hien 1 file o 2 tin; relay va watch dung chung)."""
+    def add(state):
+        now = time.time()
+        recent = [x for x in state.setdefault("sent_media", {}).get(key, [])
+                  if now - x.get("t", 0) < MEDIA_DEDUP_SECONDS][-MEDIA_DEDUP_KEEP:]
+        state["sent_media"][key] = recent
+        if any(x.get("md5") == digest for x in recent):
+            return False
+        recent.append({"md5": digest, "t": now})
+        return True
+    return update_state(add)
+
+
+def release_media(key, digest):
+    """Bo ghi nhan claim_media khi gui loi (de ban trung sau do con co the gui)."""
+    def drop(state):
+        lst = (state.get("sent_media") or {}).get(key) or []
+        state.setdefault("sent_media", {})[key] = [x for x in lst if x.get("md5") != digest]
+    try:
+        update_state(drop)
+    except Exception:
+        logger.exception("Khong bo duoc ghi nhan file gui loi")
 
 
 def claim(key, mid):
@@ -967,6 +1172,91 @@ def on_link_button(c):
     do_link(m.chat.id, topic, profile)
 
 
+# ---------- /tach: tach 1 Muse thanh vien khoi doi ----------
+# Bot luu qua API dashboard (POST /settings/muse-team/detach): Muse vao "excluded", bo vai tro + thiet lap doi, ghi
+# "detached" -> team_detach huy viec dang mo + nhan Muse bo boi canh doi; wipe thi xoa du lieu Muse (reset_targets).
+
+def detach_check(profile):
+    """Loi (HTML) neu khong tach duoc profile khoi doi, None neu duoc."""
+    chief, workers = team_reset_people()
+    p = html.escape(profile)
+    if not chief:
+        return "Đội Muse đang ở chế độ Độc lập, không có đội để tách Muse ra."
+    if profile == chief:
+        return (f"<b>{p}</b> là chỉ huy, không tách được. Đổi chỉ huy trên dashboard FoxProfile → Đội Muse trước, "
+                f"hoặc chuyển đội sang Độc lập.")
+    if profile not in workers:
+        return f"<b>{p}</b> không ở trong đội. Thành viên: {html.escape(', '.join(workers)) or '—'}."
+    if len(workers) == 1:
+        return (f"<b>{p}</b> là thành viên cuối cùng của đội. Muốn bỏ đội thì chuyển sang <b>Độc lập</b> trên "
+                f"dashboard FoxProfile → Đội Muse.")
+    if len(f"{DETACH_DATA}ask:{profile}".encode()) > 64:  # gioi han callback_data cua Telegram
+        return "Tên profile quá dài, bot không tạo được nút xác nhận. Tách Muse này trên dashboard FoxProfile."
+    return None
+
+
+def ask_detach(m, profile):
+    """Buoc 1: canh bao + chon tach co xoa du lieu Muse hay giu."""
+    chief, _ = team_reset_people()
+    p = html.escape(profile)
+    tasks = [t["id"] for t in (load_state().get("tasks") or {}).values()
+             if t["to"] == profile and t["status"] in muse_team.OPEN_STATUSES]
+    kb = types.InlineKeyboardMarkup(row_width=1)
+    kb.add(types.InlineKeyboardButton("✂️ Tách + xoá dữ liệu Muse", callback_data=f"{DETACH_DATA}w:{profile}"),
+           types.InlineKeyboardButton("✂️ Tách, giữ dữ liệu Muse", callback_data=f"{DETACH_DATA}k:{profile}"),
+           types.InlineKeyboardButton("Huỷ", callback_data=f"{DETACH_DATA}no"))
+    bot.send_message(m.chat.id,
+                     f"✂️ <b>Tách {p} khỏi đội Muse?</b>\n\nChỉ huy <b>{html.escape(chief)}</b> không giao việc cho "
+                     f"{p} nữa (bot giới thiệu lại đội cho chỉ huy); vai trò và ngữ cảnh đội của {p} bị bỏ"
+                     + (f"; <b>huỷ các việc đang mở</b>: {', '.join(tasks)}" if tasks else "") + ".\n\n"
+                     f"• <b>Tách + xoá dữ liệu Muse</b>: xoá vĩnh viễn chat, file, artifact của {p} và tin trong topic "
+                     f"(bot tạo lại topic), để Muse không còn nhớ gì của đội. <b>Không hoàn tác.</b>\n"
+                     f"• <b>Tách, giữ dữ liệu</b>: bot nhắn {p} bỏ bối cảnh đội khỏi bộ nhớ dài hạn.\n\n"
+                     f"Cho vào đội lại: dashboard FoxProfile → Đội Muse → tick lại {p}.",
+                     parse_mode="HTML", reply_markup=kb, message_thread_id=topic_of(m))
+
+
+def on_detach_button(c):
+    m = c.message
+    if not is_admin(c.from_user):
+        bot.answer_callback_query(c.id, "Chỉ chủ bot mới tách được Muse khỏi đội.")
+        return
+    action, _, profile = c.data[len(DETACH_DATA):].partition(":")
+
+    def done(text):
+        try:
+            bot.edit_message_text(text, m.chat.id, m.message_id, parse_mode="HTML", reply_markup=None)
+        except Exception:
+            logger.debug("Khong sua duoc tin tach Muse", exc_info=True)
+    if action == "no":
+        bot.answer_callback_query(c.id, "Đã huỷ.")
+        done("Đã huỷ tách Muse khỏi đội.")
+        return
+    err = detach_check(profile)
+    if err:
+        bot.answer_callback_query(c.id, "Không tách được.")
+        done("⚠️ " + err)
+        return
+    if action == "ask":
+        bot.answer_callback_query(c.id)
+        done(f"✂️ Tách {html.escape(profile)}:")
+        ask_detach(m, profile)
+        return
+    wipe = action == "w"
+    try:
+        fox_api("POST", "/settings/muse-team/detach", json={"profile": profile, "wipe": wipe})
+    except Exception as e:
+        logger.exception("Doi Muse: loi tach Muse tu Telegram")
+        bot.answer_callback_query(c.id, "Lỗi, chưa tách.")
+        done(f"❌ Chưa tách {html.escape(profile)}: {html.escape(str(e))}")
+        return
+    logger.warning(f"Doi Muse: tach {profile} tu Telegram (xoa du lieu: {wipe})")
+    bot.answer_callback_query(c.id, "Đã tách.")
+    done(f"✂️ <b>Đã lệnh tách {html.escape(profile)} khỏi đội.</b> Trong ~{TEAM_LOOP_SECONDS}s bot huỷ các việc đang "
+         f"mở của Muse này" + (", xoá dữ liệu Muse (tạo lại topic)" if wipe else ", nhắn Muse bỏ bối cảnh đội")
+         + " và giới thiệu lại đội cho chỉ huy (báo ở General).")
+
+
 # ---------- reset Muse cua 1 profile ----------
 
 def ask_reset(m, profile):
@@ -1009,6 +1299,177 @@ def on_reset_button(c):
     bot.send_message(m.chat.id, f"⏳ Đang reset Muse của profile {html.escape(profile)}... (có thể mất vài phút)",
                      parse_mode="HTML", message_thread_id=topic_of(m))
     jobs.put({"kind": "reset", "m": m, "chat": {"key": profile, "profile": profile}, "profile": profile})
+
+
+# ---------- /reset o muc General (chi huy): reset ca doi roi thiet lap lai theo mau ngu canh chu chon ----------
+# Mau ngu canh nam o dashboard FoxProfile (foxprofile/repo/src/core/muse_team.py TEMPLATES). Bot doc / luu qua API
+# /settings/muse-team (dung duong dashboard dung) voi reset_data: team_tick thay reset_id moi -> team_start_reset nhu
+# khi chu luu tren dashboard: xoa du lieu Muse chi huy + ca doi, xong gui lai ngon ngu + ngu canh moi, gioi thieu doi.
+
+def fox_api(method, path, **kw):
+    base = os.environ.get("FOXPROFILE_URL", "http://127.0.0.1:8090").rstrip("/")
+    token = os.environ.get("FOXPROFILE_API_TOKEN", "")
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    try:
+        r = requests.request(method, f"{base}/api/v1{path}", headers=headers, timeout=30, **kw)
+    except requests.RequestException as e:
+        raise RuntimeError(f"không kết nối được FoxProfile ({base}): {type(e).__name__}") from e
+    if not r.ok:
+        try:
+            detail = r.json().get("detail") or r.text
+        except ValueError:
+            detail = r.text
+        raise RuntimeError(f"FoxProfile báo lỗi {r.status_code}: {str(detail)[:300]}")
+    return r.json()
+
+
+def team_templates():
+    """(cai dat doi tren dashboard, cac mau ngu canh, id mau chi huy dang dung hoac "")."""
+    team = fox_api("GET", "/settings/muse-team")
+    tps = [t for t in team.get("templates") or []
+           if t.get("id") and len(f"{TEAM_RESET_DATA}go:t:{t['id']}".encode()) <= 64]  # gioi han callback_data
+    chief_ctx = ((team.get("setup") or {}).get(team.get("chief")) or {}).get("context", "").strip()
+    current = next((t["id"] for t in tps if chief_ctx and chief_ctx == (t.get("chief") or "").strip()), "")
+    return team, tps, current
+
+
+def team_reset_people():
+    """(chi huy, thanh vien) theo cai dat doi; khong o che do chi huy: ("", [])."""
+    cfg = muse_team.config()
+    chief = cfg["chief"] if cfg["mode"] == "chief" else ""
+    return chief, (team_workers(chief) if chief else [])
+
+
+def team_reset_busy():
+    """Dot xoa du lieu doi dang chay / chua bat dau (dashboard hoac Telegram)."""
+    cfg = muse_team.config()
+    return "reset" in team_inflight or bool(cfg["reset_id"] and load_state().get("team_reset") != cfg["reset_id"])
+
+
+def ask_team_reset(m):
+    """Buoc 1: chon mau ngu canh cho doi sau khi xoa (hoac giu ngu canh dang co / chi reset chi huy)."""
+    chief, workers = team_reset_people()
+    try:
+        _, tps, current = team_templates()
+    except Exception as e:
+        bot.reply_to(m, f"⚠️ Bot không đọc được mẫu ngữ cảnh từ FoxProfile: {e}")
+        return
+    kb = types.InlineKeyboardMarkup(row_width=1)
+    for t in tps:
+        kb.add(types.InlineKeyboardButton(("✅ " if t["id"] == current else "✨ ") + t["label"]
+                                          + (" (đang dùng)" if t["id"] == current else ""),
+                                          callback_data=f"{TEAM_RESET_DATA}t:{t['id']}"))
+    kb.add(types.InlineKeyboardButton("📌 Giữ ngữ cảnh đang có", callback_data=f"{TEAM_RESET_DATA}keep"))
+    kb.row(types.InlineKeyboardButton(f"Chỉ reset {chief}"[:60], callback_data=f"{TEAM_RESET_DATA}chief"),
+           types.InlineKeyboardButton("Huỷ", callback_data=f"{TEAM_RESET_DATA}no"))
+    people = html.escape(", ".join(workers)) or "— (chưa có thành viên)"
+    bot.send_message(m.chat.id,
+                     f"♻️ <b>Reset cả đội Muse?</b>\nChỉ huy <b>{html.escape(chief)}</b> + thành viên: {people}.\n\n"
+                     f"Bot xoá dữ liệu Muse (chat, file, artifact, task) của tất cả, rồi tự gửi lại <b>ngữ cảnh</b> "
+                     f"(bộ nhớ dài hạn) cho từng Muse và giới thiệu lại đội cho chỉ huy.\n\n"
+                     f"<b>Chọn ngữ cảnh</b> cho đội sau khi reset:",
+                     parse_mode="HTML", reply_markup=kb, message_thread_id=topic_of(m))
+
+
+def apply_team_reset(choice):
+    """Luu cai dat doi qua API dashboard: mau (choice "t:<id>") dien ngu canh chi huy / thanh vien (+ vai tro con
+    trong), dat reset_data cho chi huy + ca doi; doi mau thi reset_team_data (bo viec, video mau, kich ban, cat bo
+    nhan vat). "keep": giu ngu canh, chi xoa du lieu Muse. Tra ve ten ngu canh."""
+    team, tps, _ = team_templates()
+    chief, workers = team_reset_people()
+    if not chief or team.get("mode") != "chief" or team.get("chief") != chief:
+        raise RuntimeError("đội không còn ở chế độ có chỉ huy")
+    setup = {p: dict(v) for p, v in (team.get("setup") or {}).items()}
+    roles = dict(team.get("roles") or {})
+    label, full = "ngữ cảnh đang có", False
+    if choice.startswith("t:"):
+        tp = next((t for t in tps if t["id"] == choice[2:]), None)
+        if not tp:
+            raise RuntimeError(f"không còn mẫu {choice[2:]} trên dashboard")
+        for p, text in [(chief, tp["chief"])] + [(w, tp["member"]) for w in workers]:
+            item = setup.setdefault(p, {})
+            item["context"], item["lang"] = text, item.get("lang") or "vi"
+        for w in workers:
+            if tp.get("member_role") and not roles.get(w, "").strip():
+                roles[w] = tp["member_role"]
+        label, full = tp["label"], True
+    fox_api("PUT", "/settings/muse-team", json={
+        "mode": "chief", "chief": chief, "approval": team.get("approval") or "manual", "roles": roles,
+        "excluded": team.get("excluded") or [], "setup": setup,
+        "reset_data": True, "reset_targets": [], "reset_team_data": full})
+    logger.warning(f"Doi Muse: reset doi tu Telegram ({chief} + {workers}), ngu canh: {label}, full={full}")
+    return label, full
+
+
+def on_team_reset_button(c):
+    m = c.message
+    if not is_admin(c.from_user):
+        bot.answer_callback_query(c.id, "Chỉ chủ bot mới reset được Muse.")
+        return
+    action = c.data[len(TEAM_RESET_DATA):]
+    chief, workers = team_reset_people()
+
+    def done(text, kb=None):
+        try:
+            bot.edit_message_text(text, m.chat.id, m.message_id, parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            logger.debug("Khong sua duoc tin reset doi", exc_info=True)
+    if action == "no":
+        bot.answer_callback_query(c.id, "Đã huỷ.")
+        done("Đã huỷ reset đội.")
+        return
+    if not chief:
+        bot.answer_callback_query(c.id, "Đội không còn ở chế độ có chỉ huy.")
+        done("⚠️ Đội không còn ở chế độ có chỉ huy, không reset.")
+        return
+    if action == "chief":
+        bot.answer_callback_query(c.id)
+        done(f"Chỉ reset chỉ huy {html.escape(chief)}:")
+        ask_reset(m, chief)
+        return
+    if action.startswith("go:"):
+        choice = action[3:]
+        if team_reset_busy():
+            bot.answer_callback_query(c.id, "Đang có đợt xoá dữ liệu đội chưa xong.")
+            done("⏳ Đang có đợt xoá dữ liệu đội chưa xong, bot không reset thêm. Đợi báo xong rồi gõ lại /reset.")
+            return
+        try:
+            label, full = apply_team_reset(choice)
+        except Exception as e:
+            logger.exception("Doi Muse: loi reset doi tu Telegram")
+            bot.answer_callback_query(c.id, "Lỗi, chưa reset.")
+            done(f"❌ Chưa reset đội: {html.escape(str(e))}")
+            return
+        bot.answer_callback_query(c.id, "Đang reset cả đội...")
+        done(f"♻️ <b>Đã lệnh reset cả đội</b> ({html.escape(', '.join([chief] + workers))}), ngữ cảnh: "
+             f"<b>{html.escape(label)}</b>.\nTrong ~{TEAM_LOOP_SECONDS}s bot bắt đầu xoá dữ liệu Muse; xong bot tự gửi "
+             f"ngữ cảnh cho từng Muse và giới thiệu lại đội cho chỉ huy (báo ở đây)."
+             + ("\nĐổi mẫu: việc, video mẫu, kịch bản chốt bị bỏ; bộ nhân vật khoá cũ cất vào thư mục lưu trữ."
+                if full else ""))
+        return
+    # buoc 2: xac nhan lua chon
+    try:
+        _, tps, _ = team_templates()
+    except Exception as e:
+        bot.answer_callback_query(c.id, "Lỗi đọc mẫu ngữ cảnh.")
+        done(f"⚠️ Bot không đọc được mẫu ngữ cảnh từ FoxProfile: {html.escape(str(e))}")
+        return
+    tp = next((t for t in tps if action == f"t:{t['id']}"), None)
+    if action != "keep" and not tp:
+        bot.answer_callback_query(c.id, "Mẫu này không còn.")
+        return
+    bot.answer_callback_query(c.id)
+    kb = types.InlineKeyboardMarkup()
+    kb.add(types.InlineKeyboardButton("🗑 Xoá và thiết lập lại", callback_data=f"{TEAM_RESET_DATA}go:{action}"),
+           types.InlineKeyboardButton("Huỷ", callback_data=f"{TEAM_RESET_DATA}no"))
+    who = html.escape(", ".join([chief] + workers))
+    what = (f"Ngữ cảnh mới: <b>{html.escape(tp['label'])}</b> (chỉ huy nhận phần chỉ huy, mỗi thành viên nhận phần "
+            f"thành viên). Bot cũng <b>bỏ mọi việc, video mẫu, kịch bản chốt</b> và cất bộ nhân vật khoá cũ vào thư mục "
+            f"lưu trữ." if tp else
+            "Giữ <b>ngữ cảnh đang có</b> của từng Muse. Việc đang mở bị bỏ; video mẫu, kịch bản chốt, bộ nhân vật khoá "
+            "được giữ.")
+    done(f"⚠️ <b>Xác nhận reset cả đội</b>\nXoá <b>vĩnh viễn</b> dữ liệu Muse của: {who} (kèm tin trong topic của "
+         f"thành viên).\n{what}\n\n<b>Không thể hoàn tác.</b>", kb)
 
 
 def name_agent(profile, topic, only_default=True):
@@ -1068,6 +1529,7 @@ def reset_topic(profile):
     def clear_delivered(state):  # Muse da reset: tin moi cua Muse (ke ca loi chao) se duoc chuyen vao topic moi
         state.setdefault("delivered", {})[profile] = []
         (state.get("last_sent") or {}).pop(profile, None)  # doi soat khong gui lai tin cu vao Muse vua xoa sach
+    shutil.rmtree(RESEND_DIR / profile, ignore_errors=True)
     group, old = group_id(), topics().get(profile)
     if not group or old is None:
         update_state(clear_delivered)
@@ -1189,9 +1651,13 @@ def _idle(key):
     return key not in busy_keys and not (work and work.qsize()) and not relaying and not waiting
 
 
-def _on_muse(msgs, text):
-    want = muse_sync._flat(text)[:60]
-    return any(m["role"] == "user" and not m.get("failed") and want in muse_sync._flat(m.get("text")) for m in msgs)
+def _on_muse(msgs, ls):
+    """Tin TG cuoi (last_sent) co tren Muse: cung chu, va co anh / video neu tin co. Tin chi co file: tin nguoi dung
+    moi (khong co trong prior) kem anh / video."""
+    want, media, prior = muse_sync._flat(ls.get("text"))[:60], ls.get("media"), set(ls.get("prior") or ())
+    return any(m["role"] == "user" and not m.get("failed") and (m.get("attached") or not media)
+               and (want in muse_sync._flat(m.get("text")) if want else m["id"] not in prior)
+               for m in msgs)
 
 
 def reconcile_chat(chat, runs):
@@ -1217,33 +1683,42 @@ def reconcile_chat(chat, runs):
             deliver_new(fox, chat, r, tg_target(chat["tg"]), muse_sync.is_busy(fox))
     # Telegram -> Muse: tin cuoi ban gui da co tren Muse chua
     ls = (state.get("last_sent") or {}).get(key)
-    if not ls or not ls.get("text") or ls.get("verified"):
+    files = [f for f in (ls or {}).get("files") or [] if Path(f).is_file()]
+    # tin chi co file: chi xet duoc khi co anh / video (Muse hien trong bong tin) va biet cac tin co truoc khi gui
+    checkable = ls and (ls.get("text") or (ls.get("media") and ls.get("prior")))
+    if not checkable or ls.get("verified"):
         return muse_tg, "ok" if ls else "-"
     if time.time() - ls["at"] < RECONCILE_GRACE:
         return muse_tg, "cho"
-    found = _on_muse(msgs, ls["text"])
+    found = _on_muse(msgs, ls)
     if not found:  # trang co the dang o tab khac / tin tam: tai lai trang (du lieu that tren server) roi xem lai
         muse_sync.reload_chat(fox, chat["url"])
-        found = _on_muse(muse_sync.messages(fox), ls["text"])
+        found = _on_muse(muse_sync.messages(fox), ls)
     if found:
         update_state(lambda s: s["last_sent"][key].update(verified=True))
         logger.info(f"Doi soat {key}: tin TG {ls['mid']} da co tren Muse")
         return muse_tg, "ok"
     target = SimpleNamespace(chat=SimpleNamespace(id=ls["chat_id"]), message_thread_id=ls["topic"],
                              is_topic_message=bool(ls["topic"]))
-    if ls.get("resends", 0) >= RECONCILE_RESEND_MAX:
+    lost = len(ls.get("files") or []) - len(files)
+    if ls.get("resends", 0) >= RECONCILE_RESEND_MAX or lost:  # mat file: gui lai chi co chu se sai y
         update_state(lambda s: s["last_sent"][key].update(verified=True))
-        logger.error(f"Doi soat {key}: tin TG {ls['mid']} van khong co tren Muse sau {RECONCILE_RESEND_MAX} lan gui lai")
-        safe_reply(target, f"⚠️ Muse vẫn chưa nhận tin này sau {RECONCILE_RESEND_MAX} lần gửi lại, bạn gửi lại giúp: "
-                           f"{ls['text'][:300]}")
+        logger.error(f"Doi soat {key}: tin TG {ls['mid']} van khong co tren Muse sau {ls.get('resends', 0)} lan gui lai")
+        what = f"{len(ls.get('files') or [])} file" if ls.get("files") else ""
+        safe_reply(target, f"⚠️ Muse vẫn chưa nhận tin này sau {ls.get('resends', 0)} lần gửi lại, bạn gửi lại giúp"
+                           + (f" (kèm {what}; video lớn thì thử nén nhỏ lại hoặc gửi link)" if what else "") + ": "
+                           + (ls.get("text") or "")[:300])
         return muse_tg, "BO"
-    logger.warning(f"Doi soat {key}: tin TG {ls['mid']} KHONG co tren Muse -> gui lai (lan {ls.get('resends', 0) + 1})")
+    logger.warning(f"Doi soat {key}: tin TG {ls['mid']} KHONG co tren Muse -> gui lai (lan {ls.get('resends', 0) + 1})"
+                   + (f" kem {len(files)} file" if files else ""))
     seen = set()
-    ok, result = muse_sync.send(chat, ls["text"], seen=seen)
+    ok, result = muse_sync.send(chat, ls.get("text") or "", files, seen=seen)
     logger.info(f"Gui lai TG {ls['mid']} -> {key}: {result}")
-    update_state(lambda s: s["last_sent"][key].update(resends=ls.get("resends", 0) + 1, at=time.time()))
+    update_state(lambda s: s["last_sent"][key].update(resends=ls.get("resends", 0) + 1, at=time.time(),
+                                                      prior=sorted(seen) if files else []))
     if ok:
-        safe_reply(target, "🔁 Muse chưa nhận tin trước của bạn (lỗi Delivery not confirmed), bot đã gửi lại.")
+        safe_reply(target, "🔁 Muse chưa nhận tin trước của bạn" + (f" (kèm {len(files)} file)" if files else "")
+                   + ", bot đã gửi lại.")
         relay(chat, target, seen)
     return muse_tg, "GUI LAI" if ok else "LOI"
 
@@ -1310,9 +1785,10 @@ TEAM_HISTORY_KEEP = 20
 TEAM_FILES_KEEP_DAYS = 7
 TEAM_CLEANUP_SECONDS = 3600
 KIND_TEXT = {"giao": "Chỉ huy giao", "nhan": "Chỉ huy nhắn", "lamlai": "Chỉ huy yêu cầu làm lại",
-             "tiep": "Làm video tiếp", "nhac": "Bot nhắc"}
-FRESH_KINDS = ("giao", "lamlai", "tiep")  # tin bat dau 1 luot lam moi (xoa ket qua luot truoc)
+             "tiep": "Làm tiếp", "nhac": "Bot nhắc", "qc": "Bot trả lại (lỗi kỹ thuật)"}
+FRESH_KINDS = ("giao", "lamlai", "tiep", "qc")  # tin bat dau 1 luot lam moi (xoa ket qua luot truoc)
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
+CHAR_DIR = UPLOAD_DIR / "nhan_vat"  # bo nhan vat khoa: <Muse>/ anh bo nhan vat dat + nguon.txt (khong bi don)
 team_inflight = set()  # viec da xep vao hang doi profile, chua chay xong: "brief", "report", "send:<profile>", "reset"
 team_retry_at = {}  # khoa -> luc duoc thu lai (sau loi)
 team_reset_lock = threading.Lock()
@@ -1413,7 +1889,8 @@ def team_capture_file(key, data, name):
             return t["id"], "big"
         if one_video and muse_team.is_video(name) and any(muse_team.is_video(f) for f in t["files"]):
             return t["id"], "video2"
-        if len(t["files"]) >= muse_team.REPORT_MAX_FILES:
+        cap = muse_team.LOOK_MAX_FILES if t.get("stage") == "hinh" else muse_team.REPORT_MAX_FILES
+        if len(t["files"]) >= cap:
             return t["id"], "full"
         folder = team_round_dir(t)
         folder.mkdir(parents=True, exist_ok=True)
@@ -1471,7 +1948,7 @@ def team_chief_commands(cmds):
         logger.info(f"Doi Muse: chi huy {verb} {args!r:.300}")
         try:
             {"giao": team_cmd_giao, "nhan": team_cmd_nhan, "lamlai": team_cmd_lamlai,
-             "danhgia": team_cmd_danhgia}[verb](args)
+             "danhgia": team_cmd_danhgia, "kichban": team_cmd_kichban}[verb](args)
         except Exception:
             logger.exception(f"Doi Muse: loi xu ly lenh {verb}")
 
@@ -1482,25 +1959,66 @@ def team_cmd_giao(args):
     if len(args) < 2 or not args[1]:
         general_send(f"⚠️ Chỉ huy viết lệnh giao việc thiếu nội dung: <code>{html.escape(' | '.join(args))}</code>")
         return
-    to = next((w for w in workers if w.casefold() == args[0].casefold()), None)
-    if not to:
-        general_send(f"⚠️ Chỉ huy giao việc cho <b>{html.escape(args[0])}</b> nhưng đội không có Muse này. "
-                     f"Đội: {html.escape(', '.join(workers)) or '—'}")
+    names, bad = muse_team.targets(args[0], workers)
+    if bad:
+        general_send(f"⚠️ Chỉ huy giao việc cho <b>{html.escape(', '.join(bad))}</b> nhưng đội không có Muse này"
+                     + (f" — vẫn giao cho {html.escape(', '.join(names))}" if names else "")
+                     + f". Đội: {html.escape(', '.join(workers)) or '—'}")
+    if not names:
         return
-    text, parts = muse_team.task_parts(args[1]) if cfg["one_video"] else (args[1], 1)
+    text, parts, segment = muse_team.task_parts(args[1])
+    if not segment and not cfg["one_video"]:  # tat "nop tung video": giu nguyen lenh nhu ban cu
+        text, parts = args[1], 1
+    # lam video theo video mau da chot kich ban: buoc 1 tao hinh (anh), dat moi lam video
+    stage = "hinh" if muse_team.wants_look(text, load_state().get("scripts")) else ""
 
     def create(state):
         tasks = state.setdefault("tasks", {})
-        if sum(time.time() - t["created"] < 3600 for t in tasks.values()) >= cfg["max_new_per_hour"]:
-            return None
-        state["task_seq"] = state.get("task_seq", 0) + 1
-        return muse_team.new_task(tasks, state["task_seq"], to, text, parts)["id"]
-    tid = update_state(create)
-    if not tid:
-        general_send(f"⚠️ Chỉ huy đã giao {cfg['max_new_per_hour']} việc trong 1 giờ qua, bot tạm không nhận việc "
-                     f"mới: {html.escape(muse_team.short(text))}")
+        room = cfg["max_new_per_hour"] - sum(time.time() - t["created"] < 3600 for t in tasks.values())
+        made = []
+        for to in names[:max(0, room)]:
+            state["task_seq"] = state.get("task_seq", 0) + 1
+            made.append(muse_team.new_task(tasks, state["task_seq"], to, text, parts, segment, stage)["id"])
+        return made
+    made = update_state(create)
+    if len(made) < len(names):
+        general_send(f"⚠️ Chỉ huy đã giao {cfg['max_new_per_hour']} việc trong 1 giờ qua, bot tạm không nhận thêm "
+                     f"việc cho {html.escape(', '.join(names[len(made):]))}: {html.escape(muse_team.short(text))}")
+    if len(made) > 1:
+        general_send(f"📋 <b>Chỉ huy giao cùng 1 việc cho {len(made)} Muse</b>: "
+                     + ", ".join(f"{tid} → {html.escape(to)}" for tid, to in zip(made, names))
+                     + (f" ({parts} {'đoạn' if segment else 'video'})" if parts > 1 else "")
+                     + f"\n{html.escape(muse_team.short(text, 1500))}")
+    for tid in made:
+        team_dispatch(tid, "giao", text, announce=len(made) == 1)
+
+
+def team_cmd_kichban(args):
+    """[[kichban: M1 | ...]]: luu kich ban chot cho video mau (ban v1, v2...); bot tu kem khi giao theo mau do."""
+    sid = muse_team.sample_id(args[0]) if args else None
+    text = "\n".join((args[1] if len(args) > 1 else "").splitlines()).strip()[:muse_team.SCRIPT_MAX_CHARS]
+    samples = load_state().get("samples") or {}
+    if not sid or not text:
+        general_send("⚠️ Lệnh chốt kịch bản cần dạng <code>[[kichban: M1 | toàn bộ phân kịch]]</code>.")
         return
-    team_dispatch(tid, "giao", text)
+    if sid not in samples:
+        general_send(f"⚠️ Chỉ huy chốt kịch bản cho <b>{sid}</b> nhưng bot không có video mẫu này. Video mẫu đang có: "
+                     f"{html.escape(', '.join(sorted(samples))) or '—'}")
+        return
+
+    def save(state):
+        scripts = state.setdefault("scripts", {})
+        old = scripts.get(sid)
+        if old and old["text"] == text:
+            return old["v"], False
+        v = (old or {}).get("v", 0) + 1
+        scripts[sid] = {"v": v, "text": text, "at": time.time()}
+        return v, True
+    v, changed = update_state(save)
+    logger.info(f"Doi Muse: kich ban {sid} v{v} ({len(text)} ky tu, {'moi' if changed else 'khong doi'})")
+    general_send(f"📝 <b>Kịch bản chốt {sid} — bản v{v}</b>" + ("" if changed else " (giống bản trước)")
+                 + f" · {len(text)} ký tự. Giao \"theo video mẫu {sid}\" thì bot tự kèm bản này cho Muse.\n"
+                 f"<blockquote expandable>{html.escape(muse_team.short(text, 2500))}</blockquote>")
 
 
 def _task_from(args, verb):
@@ -1588,6 +2106,22 @@ def team_fail(task, label, note):
     team_dispatch(t["id"], "lamlai", (f"Điểm {label}. " if label else "") + note, announce=False)
 
 
+def save_character_lock(task):
+    """Bo nhan vat vua dat: chep anh vao CHAR_DIR/<Muse>/<ma viec>/ (giu cac bo khac) de khoa cho cac viec sau."""
+    try:
+        folder = muse_team.save_lock(CHAR_DIR, task)
+    except OSError as e:
+        logger.warning(f"Khong luu duoc bo nhan vat {task['id']}: {e}")
+        return
+    if not folder:
+        return
+    bound = muse_team.sample_refs(task.get("text"))
+    logger.info(f"Doi Muse: luu bo nhan vat {task['id']} cua {task['to']} -> {folder} (mau {bound or 'chung'})")
+    general_send(f"🔐 Đã khoá bộ nhân vật <b>{task['id']}</b> của {html.escape(task['to'])}"
+                 + (f" cho video mẫu {', '.join(bound)}" if bound else " (bộ chung)")
+                 + ": bot tự đính kèm khi giao việc theo video mẫu.")
+
+
 def team_pass(task, label, note):
     """Dat: viec 1 video thi dong; viec nhieu video thi cho Muse lam video tiep. Anh / video da dat gui vao topic."""
     now = time.time()
@@ -1597,29 +2131,45 @@ def team_pass(task, label, note):
         files = list(t["files"])
         t["passed_files"] = t.get("passed_files", []) + files
         t["passed_report"] = list(t["report"])
+        vids = [f for f in files if muse_team.is_video(f)]
+        if vids:  # video dat cua video / doan nay (noi doan dung)
+            t.setdefault("part_videos", {})[str(t.get("part", 1))] = vids[0]
         t.setdefault("scores", []).append(label)
         t.update(score=label, note=note, files=[], updated=now)
-        if t.get("part", 1) < t.get("parts", 1):
-            t.update(part=t.get("part", 1) + 1, round=0, status="cho", nudged=False)
+        if t.get("stage") == "hinh":  # buoc tao hinh dat: giu anh, cho lam buoc 2 = video
+            t["look_files"] = [f for f in files if Path(f).suffix.lower() in IMAGE_EXT]
+            t.update(stage="video", round=0, status="cho", nudged=False, qc_returns=0)
+            t["queue"] = [{"kind": "tiep", "text": muse_team.look_done_text(t, label, note)}]
+        elif t.get("part", 1) < t.get("parts", 1):
+            t.update(part=t.get("part", 1) + 1, round=0, status="cho", nudged=False, qc_returns=0)
             t["queue"] = [{"kind": "tiep", "text": muse_team.next_part_text(t, label, note)}]
         else:
             t.update(status="dat", queue=[])
         return dict(t), files
     t, files = update_state(apply)
+    if muse_team.is_character_set(t):
+        save_character_lock(t)
+    # vua dat buoc tao hinh: con o phan 1 ma chuyen "cho" (dat 1 video / doan thi phan da tang len >= 2)
+    look_done = t["status"] == "cho" and t.get("part", 1) == 1
     done = t["part"] - 1 if t["status"] == "cho" else t["part"]
-    pl = f" video {done}/{t['parts']}" if t.get("parts", 1) > 1 else ""
+    unit = "đoạn" if t.get("segment") else "video"
+    pl = (" bước 1 tạo hình" if look_done else f" {unit} {done}/{t['parts']}" if t.get("parts", 1) > 1 else "")
     line = (f"✅ <b>{t['id']}</b> ({html.escape(t['to'])}){pl} đạt <b>{html.escape(label)}</b>"
             + (f" — {html.escape(muse_team.short(note, 600))}" if note else ""))
-    if muse_team.is_video_task({**t, "files": files}):
+    if not look_done and muse_team.is_video_task({**t, "files": files}):
         info = muse_team.video_info({"report": t.get("passed_report")})
         line += "".join(f"\n{name}: {html.escape(info[key])}" for name, key in
                         (("Link tải", "link"), ("Caption", "caption"), ("Hashtag", "hashtag")) if info[key])
-    nxt = (f"\nBot cho {html.escape(t['to'])} làm video {t['part']}/{t['parts']}." if t["status"] == "cho"
-           else "\nĐã đóng việc.")
+    nxt = (f"\nBot giữ {len(t.get('look_files') or [])} ảnh tạo hình, cho {html.escape(t['to'])} làm bước 2 (video) "
+           f"từ các ảnh này." if look_done
+           else f"\nBot cho {html.escape(t['to'])} làm {unit} {t['part']}/{t['parts']}." if t["status"] == "cho"
+           else f"\nĐủ {t['parts']} đoạn: bot đang nối thành 1 video." if t.get("segment") else "\nĐã đóng việc.")
     shown = [f for f in files if Path(f).is_file()]
     general_send(line + nxt + (f" Ảnh/video đã đạt gửi trong topic {html.escape(t['to'])}." if shown else ""))
     videos = [f for f in shown if muse_team.is_video(f)]
-    if videos:  # dang video dat qua kenh trong Bang dang bai (hoi bang nut / tu dong)
+    if t.get("segment") and t["status"] == "dat":
+        threading.Thread(target=team_stitch, args=(t,), daemon=True).start()
+    if videos and not t.get("segment"):  # dang video dat qua kenh trong Bang dang bai (hoi bang nut / tu dong)
         try:
             team_offer_post(t, done, videos[0], muse_team.video_info({"report": t.get("passed_report")}))
         except Exception:
@@ -1638,6 +2188,113 @@ def team_pass(task, label, note):
         except Exception:
             logger.exception(f"Khong gui duoc ket qua dat {t['id']} vao topic {t['to']}")
     threading.Thread(target=publish, daemon=True).start()
+
+
+def team_stitch(t):
+    """Viec chia doan vua dat doan cuoi: noi video cac doan (theo thu tu) thanh 1 video, gui topic + hoi dang."""
+    parts = [(t.get("part_videos") or {}).get(str(k)) for k in range(1, t.get("parts", 1) + 1)]
+    missing = [str(k + 1) for k, f in enumerate(parts) if not f or not Path(f).is_file()]
+    if missing:
+        general_send(f"⚠️ <b>{t['id']}</b>: thiếu file video đoạn {', '.join(missing)}, bot không nối được. Xem từng "
+                     f"đoạn trong topic {html.escape(t['to'])}.")
+        return
+    out = team_files_dir(t["id"]) / f"{t['id']}_full.mp4"
+    try:
+        final, err = video_sample.concat(parts, out)
+    except Exception as e:
+        final, err = None, f"{type(e).__name__}: {e}"
+    if not final:
+        logger.warning(f"Doi Muse: noi doan {t['id']} loi: {err}")
+        general_send(f"⚠️ <b>{t['id']}</b>: nối {len(parts)} đoạn bị lỗi ({html.escape(err[:300])}).")
+        return
+    _, line, _ = video_sample.check(final)
+    update_state(lambda s: s["tasks"][t["id"]].update(final=final, updated=time.time()))
+    logger.info(f"Doi Muse: noi {len(parts)} doan {t['id']} -> {final} ({line})")
+    general_send(f"🎬 <b>{t['id']}</b> ({html.escape(t['to'])}): đã nối {len(parts)} đoạn thành 1 video — "
+                 f"{html.escape(line)}. Video gửi trong topic {html.escape(t['to'])}.")
+    topic = topics().get(t["to"])
+    if topic:
+        team_send_files(tg_target(f"{group_id()}/{topic}"), [final],
+                        f"🎬 {t['id']} — video hoàn chỉnh ({len(parts)} đoạn)")
+    try:
+        team_offer_post(t, 1, final, muse_team.video_info({"report": t.get("passed_report")}))
+    except Exception:
+        logger.exception(f"Loi khi hoi dang video {t['id']}")
+
+
+# ---------- kiem tra ky thuat video nop (video_sample.check) ----------
+
+qc_hashes = {}  # (duong dan, kich thuoc, mtime) -> md5
+
+
+def _video_hash(path):
+    st = Path(path).stat()
+    key = (str(path), st.st_size, st.st_mtime)
+    if key not in qc_hashes:
+        qc_hashes[key] = video_sample.file_hash(path)
+    return qc_hashes[key]
+
+
+def old_video_hashes(tasks, own):
+    """md5 cac video da nop truoc day (moi viec, ca cac lan chua dat), tru lan nop dang xet cua viec own."""
+    out = set()
+    for t in tasks.values():
+        files = list(t.get("passed_files") or []) + [f for h in t.get("history") or [] for f in h.get("files") or []]
+        if t["id"] != own:
+            files += t.get("files") or []
+        for f in files:
+            if muse_team.is_video(f) and Path(f).is_file():
+                try:
+                    out.add(_video_hash(f))
+                except OSError:
+                    pass
+    return out
+
+
+def team_qc_return(task, tasks):
+    """Do video vua nop (1 lan / lan nop, ghi vao task["qc"] cho bao cao). Loi nang va con luot tra lai: bot gui Muse
+    lam lai ngay (khong qua chi huy, khong tinh luot cham), tra ve True."""
+    vids = [f for f in task["files"] if muse_team.is_video(f) and Path(f).is_file()]
+    if not vids:
+        return False
+    sig = "v2|" + "|".join(vids)
+    if task.get("qc_sig") != sig:
+        target = task.get("target")
+        if not target:  # viec giao truoc khi bot luu chuan: lay tu video mau nhac trong mo ta viec
+            saved = load_state().get("samples") or {}
+            sid = next((x for x in video_sample.sample_refs(task.get("text")) if x in saved), None)
+            target = video_sample.target_of(saved[sid]) if sid else {}
+        target = target or {"sound": False}  # viec khong theo mau: chi bat trung file
+        try:
+            hard, line, _ = video_sample.check(vids[0], target, task.get("segment"),
+                                               old_video_hashes(tasks, task["id"]))
+        except Exception as e:
+            logger.warning(f"Doi Muse: khong do duoc video {task['id']}: {e}")
+            hard, line = [], f"bot không đo được video ({type(e).__name__})"
+        logger.info(f"Doi Muse: do video {task['id']}: {line} | loi: {hard or 'khong'}")
+        update_state(lambda s: s["tasks"][task["id"]].update(
+            qc_sig=sig, qc_hard=hard, qc=[line] + [f"LỖI — {h}" for h in hard]))
+        task = load_state()["tasks"][task["id"]]
+    hard, used = task.get("qc_hard") or [], task.get("qc_returns", 0)
+    if not hard or used >= muse_team.QC_RETURNS:
+        return False
+    line, now = (task.get("qc") or [""])[0], time.time()
+    text = muse_team.qc_text(hard, line, muse_team.QC_RETURNS - used - 1)
+
+    def back(s):
+        t = s["tasks"][task["id"]]
+        t.setdefault("history", []).append({"part": t.get("part", 1), "round": t.get("round", 0), "score": "bot đo",
+                                            "note": "; ".join(hard), "files": t["files"], "at": now})
+        del t["history"][:-TEAM_HISTORY_KEEP]
+        t.update(qc_returns=used + 1, files=[], updated=now)
+        t["queue"].append({"kind": "qc", "text": text})
+    update_state(back)
+    pl = muse_team.part_label(task)
+    note = (f"🔁 <b>{task['id']}</b> ({html.escape(task['to'])}){' ' + pl if pl else ''}: bot trả lại, chưa đưa chỉ huy "
+            f"— {html.escape('; '.join(hard))} (lần {used + 1}/{muse_team.QC_RETURNS}, không tính lượt chấm).")
+    general_send(note)
+    topic_send(task["to"], note)
+    return True
 
 
 # ---------- dang video dat: Bang dang bai (social_post/data/post_map.json) -> hang doi auto_post.py ----------
@@ -1816,31 +2473,138 @@ def on_team_button(c):
     bot.reply_to(m, f"❌ Đã bỏ {'việc' if item['kind'] == 'giao' else 'tin nhắn của chỉ huy cho việc'} {item['tid']}.")
 
 
-def team_start_reset(cfg, chief, workers):
-    """Chu tick "Xoa du lieu Muse" khi luu doi tren dashboard: reset Muse cua chi huy + ca doi (1 lan / ma reset_id),
-    bo cac viec dang mo, xoa file ket qua, gioi thieu lai doi cho chi huy khi xong."""
-    rid, targets, now = cfg["reset_id"], [chief] + workers, time.time()
+def team_detach(cfg, state, workers):
+    """Muse vua TACH khoi doi (dashboard nut Tach / lenh /tach; muse_team.json "detached"), 1 lan / ma tach:
+    bo MOI viec dang mo cua Muse do, ca viec dang lam / cho cham (bo tick tren dashboard thi viec dang lam van cho xong),
+    bao o General + topic. Tach ma khong xoa du lieu: khi Muse ranh, nhan Muse bo boi canh doi khoi bo nho dai han
+    (gui nhu thiet lap, chu ky "leave:<ma>"; Muse vao doi lai thi thiet lap moi gui de len). Tach co xoa du lieu thi
+    team_start_reset (reset_targets) chay truoc va da bo viec. Tra ve True khi da doi state."""
+    done, now, changed = state.get("team_detached") or {}, time.time(), False
+    todo = {p: d["id"] for p, d in cfg["detached"].items()
+            if done.get(p) != d["id"] and p not in workers and p != cfg["chief"]
+            and f"send:{p}" not in team_inflight}  # dang gui viec cho Muse: doi gui xong roi moi huy
+    if todo:
+        def apply(s):
+            dropped = []
+            for t in (s.get("tasks") or {}).values():
+                if t["to"] in todo and t["status"] in muse_team.OPEN_STATUSES:
+                    t.update(status="bo", queue=[], updated=now)
+                    dropped.append(t["id"])
+            s["team_pending"] = {k: v for k, v in (s.get("team_pending") or {}).items()
+                                 if v.get("tid") not in dropped}
+            s.setdefault("team_detached", {}).update(todo)
+            return dropped
+        dropped = update_state(apply)
+        changed = True
+        logger.warning(f"Doi Muse: tach {sorted(todo)} khoi doi, bo viec {dropped}")
+        general_send(f"✂️ <b>Đã tách {html.escape(', '.join(sorted(todo)))} khỏi đội Muse</b>"
+                     + (f"; huỷ các việc đang mở: {', '.join(dropped)}" if dropped else "")
+                     + ". Bot giới thiệu lại đội cho chỉ huy. Muốn cho vào đội lại: dashboard FoxProfile → Đội Muse → "
+                       "tick lại Muse đó.")
+        for p in todo:
+            topic_send(p, "✂️ <b>Muse này đã tách khỏi đội Muse</b>: chỉ huy không giao việc cho Muse này nữa. Bạn nhắn "
+                          "trực tiếp ở topic này như Muse độc lập.")
+        state = load_state()
+    mapped, sent = topics(), state.get("team_setup") or {}
+    for p, d in cfg["detached"].items():
+        sig = f"leave:{d['id']}"
+        if (d["wipe"] or p in workers or p == cfg["chief"] or p not in mapped or sent.get(p) == sig
+                or (state.get("team_detached") or {}).get(p) != d["id"]
+                or {f"setup:{p}", f"send:{p}"} & team_inflight or not _idle(p)
+                or now < team_retry_at.get(f"setup:{p}", 0)):
+            continue
+        team_inflight.add(f"setup:{p}")
+        jobs.put({"kind": "team_setup", "chat": chat_of(p, mapped[p]), "profile": p, "sig": sig,
+                  "text": muse_team.leave_text(),
+                  "done": f"✂️ Đã nhắn {html.escape(p)} bỏ bối cảnh đội khỏi bộ nhớ dài hạn (đã tách khỏi đội)."})
+    return changed
+
+
+def team_start_reset(cfg):
+    """Xoa du lieu Muse theo dashboard (1 lan / ma reset_id), xong thi gui lai ngu canh + gioi thieu lai doi.
+    - reset_targets: chi xoa cac Muse do (vd Muse vua doi ngu canh; chi Muse co topic); trong = chi huy + ca doi.
+      Bo viec dang mo cua cac Muse bi xoa (xoa chi huy thi bo moi viec dang mo, chi huy mat het boi canh).
+    - reset_full ("Reset doi" hoac doi mau ngu canh): bo HET viec, video mau, kich ban chot; chuyen bo nhan vat khoa +
+      video mau vao UPLOAD_DIR/da_reset/<luc>/ (kem ban sao state) de doi lam lai tu dau ma khong mat han. Ma viec /
+      ma mau van danh so tiep (khong dung lai T1, M1)."""
+    rid, full, now, mapped = cfg["reset_id"], cfg["reset_full"], time.time(), topics()
+    chief = cfg["chief"] if cfg["mode"] == "chief" else ""
+    if cfg["reset_targets"]:
+        targets = [p for p in cfg["reset_targets"] if p in mapped or (p == chief and chief)]
+        skipped = [p for p in cfg["reset_targets"] if p not in targets]
+    else:
+        targets, skipped = ([chief] if chief else []) + team_workers(chief), []
+    whole = full or not chief or chief in targets  # bo moi viec dang mo + file ket qua + nut duyet / dang
+    archive = UPLOAD_DIR / "da_reset" / time.strftime("%Y%m%d_%H%M%S") if full else None
+    if archive:
+        archive.mkdir(parents=True, exist_ok=True)
+        try:
+            with state_lock:
+                shutil.copy2(STATE_FILE, archive / STATE_FILE.name)
+        except OSError as e:
+            logger.warning(f"Doi Muse: khong sao luu duoc state truoc khi reset doi: {e}")
 
     def clear(state):
+        dropped = []
         for t in (state.get("tasks") or {}).values():
-            if t["status"] in muse_team.OPEN_STATUSES:
+            if t["status"] in muse_team.OPEN_STATUSES and (whole or t["to"] in targets):
                 t.update(status="bo", queue=[], updated=now)
-        state["team_pending"] = {}
-        state.pop("team_brief", None)
-        state.pop("team_setup", None)  # Muse moi reset: gui lai ngon ngu + ngu canh
-        state["team_posts"] = {}  # nut Dang cu: file ket qua bi xoa cung
-        state["team_reset"] = rid  # ghi ngay: bot tat giua chung cung khong reset lan nua
-        for p in targets:
+                dropped.append(t["id"])
+        if full:  # reset doi: bo ca lich su viec, video mau, kich ban (ban sao trong archive)
+            for key in ("tasks", "samples", "scripts"):
+                state[key] = {}
+        if whole:
+            state["team_pending"] = {}
+            state["team_posts"] = {}  # nut Dang cu: file ket qua bi xoa cung
+        else:
+            state["team_pending"] = {k: v for k, v in (state.get("team_pending") or {}).items()
+                                     if v.get("tid") not in dropped}
+        if whole or chief in targets:
+            state.pop("team_brief", None)
+        sent = state.get("team_setup") or {}
+        for p in targets:  # Muse moi reset: gui lai ngon ngu + ngu canh
+            sent.pop(p, None)
             (state.get("last_sent") or {}).pop(p, None)
-    update_state(clear)
-    shutil.rmtree(UPLOAD_DIR / "team", ignore_errors=True)
+        state["team_reset"] = rid  # ghi ngay: bot tat giua chung cung khong reset lan nua
+        return dropped
+    dropped = update_state(clear)
+    if whole:
+        shutil.rmtree(UPLOAD_DIR / "team", ignore_errors=True)
+    else:
+        for tid in dropped:
+            shutil.rmtree(UPLOAD_DIR / "team" / tid, ignore_errors=True)
+    moved = []
+    for folder in ((CHAR_DIR, UPLOAD_DIR / "mau") if archive else ()):
+        if folder.is_dir():
+            try:
+                shutil.move(str(folder), str(archive / folder.name))
+                moved.append(folder.name)
+            except OSError as e:
+                logger.warning(f"Doi Muse: khong chuyen duoc {folder} vao {archive}: {e}")
+    logger.warning(f"Doi Muse: {'reset doi' if full else 'xoa du lieu Muse'} {targets} (reset_id {rid}"
+                   + (f", luu tru {archive}: {moved}, bo qua {skipped}" if full else "") + ")")
+    if full:
+        general_send("♻️ <b>Làm mới đội Muse</b> theo dashboard (reset đội / đổi mẫu ngữ cảnh): đã bỏ mọi việc, video "
+                     "mẫu, kịch bản chốt" + (f"; bộ nhân vật khoá + video mẫu cũ chuyển vào <code>"
+                                              f"{html.escape(str(archive))}</code>" if moved else "") + ".\n"
+                     + (f"Đang xoá dữ liệu Muse của {html.escape(', '.join(targets))}..." if targets
+                        else "Không có Muse nào cần xoá dữ liệu.")
+                     + (f"\nBỏ qua (không phải Muse bot đang chạy): {html.escape(', '.join(skipped))}" if skipped
+                        else ""))
+    else:
+        leaving = [p for p in targets if p in cfg["detached"] and p != chief and p in cfg["excluded"]]
+        general_send(f"♻️ <b>Đang xoá dữ liệu Muse</b> của {html.escape(', '.join(targets)) or '—'} theo cài đặt trên "
+                     f"dashboard" + (f" (chỉ huy {html.escape(chief)})" if chief in targets else "")
+                     + (f" ({html.escape(', '.join(leaving))} tách khỏi đội)" if leaving else "") + ". "
+                     + (f"Đã bỏ việc đang mở: {', '.join(dropped)}. " if dropped else "")
+                     + ("" if len(leaving) == len(targets) else
+                        "Xong bot gửi lại ngữ cảnh" + (" và giới thiệu lại đội cho chỉ huy." if chief in targets
+                                                       else " cho các Muse này.")))
+    if not targets:
+        return
     with team_reset_lock:
         team_reset_run.update(left=set(targets), lines=[])
     team_inflight.add("reset")
-    logger.warning(f"Doi Muse: xoa du lieu Muse cua {targets} (reset_id {rid})")
-    general_send(f"♻️ <b>Đang xoá dữ liệu Muse của cả đội</b> (chỉ huy {html.escape(chief)}, "
-                 f"{html.escape(', '.join(workers)) or '—'}) theo cài đặt trên dashboard. Các việc đang mở đã được bỏ. "
-                 f"Xong bot sẽ giới thiệu lại đội cho chỉ huy.")
     for p in targets:
         jobs.put({"kind": "team_reset", "chat": {"key": p, "profile": p}, "profile": p, "chief": p == chief})
 
@@ -1896,31 +2660,38 @@ def team_cleanup(tasks):
 
 def team_tick():
     cfg = muse_team.config()
-    if cfg["mode"] != "chief" or not group_id():
+    if not group_id() or "reset" in team_inflight:  # dang xoa du lieu Muse ca doi: cho xong moi dieu phoi
+        return
+    state = load_state()
+    # Reset doi (reset_full) chay ca khi thiet lap da ve "solo"; xoa du lieu khi luu chi ap dung o che do chi huy
+    if (cfg["reset_id"] and state.get("team_reset") != cfg["reset_id"]
+            and (cfg["reset_full"] or cfg["mode"] == "chief")):
+        team_start_reset(cfg)
+        return
+    if cfg["mode"] != "chief":
         return
     chief, now = cfg["chief"], time.time()
     workers = team_workers(chief)
-    state = load_state()
-    if "reset" in team_inflight:  # dang xoa du lieu Muse ca doi: cho xong moi dieu phoi
-        return
-    if cfg["reset_id"] and state.get("team_reset") != cfg["reset_id"]:
-        team_start_reset(cfg, chief, workers)
-        return
+    if team_detach(cfg, state, workers):
+        state = load_state()
     if now - team_cleaned_at[0] >= TEAM_CLEANUP_SECONDS:
         team_cleaned_at[0] = now
         team_cleanup(state.get("tasks") or {})
     chief_free = not team_inflight & {"brief", "report"} and _idle(chief)
     # Gioi thieu doi cho chi huy (lan dau / khi doi chi huy, thanh vien, vai tro, luat cham)
-    brief_sig = json.dumps(["v3", chief, workers, [cfg["roles"].get(w, "") for w in workers],
+    tasks = state.get("tasks") or {}
+    # bo nhan vat da khoa (CHAR_DIR): doi bo (vd vua cham dat / luu bo moi) thi gioi thieu lai
+    locks = muse_team.locked_sets(CHAR_DIR, tasks)
+    brief_sig = json.dumps(["v7", chief, workers, [cfg["roles"].get(w, "") for w in workers],
                             [muse_team.lang_name(cfg, w) for w in workers], cfg["task_lang"], cfg["pass_score"],
-                            cfg["max_rounds"],
-                            cfg["one_video"]], ensure_ascii=False)
+                            cfg["max_rounds"], cfg["one_video"],
+                            {k: [[x["source"], x["samples"], len(x["files"])] for x in v]
+                             for k, v in sorted(locks.items())}], ensure_ascii=False)
     if state.get("team_brief") != brief_sig and chief_free and now >= team_retry_at.get("brief", 0):
         team_inflight.add("brief")
         chief_free = False
         jobs.put({"kind": "team_brief", "chat": chat_of(chief, None), "sig": brief_sig,
-                  "text": muse_team.briefing(cfg, workers)})
-    tasks = state.get("tasks") or {}
+                  "text": muse_team.briefing(cfg, workers, locks, state.get("samples"), state.get("scripts"))})
     mapped = topics()
     # Ngon ngu + ngu canh (bo nho dai han) tung Muse: gui 1 lan / khi chu sua, luc Muse ranh va khong dang lam viec
     sent_setup = state.get("team_setup") or {}
@@ -1957,6 +2728,23 @@ def team_tick():
         general_send("ℹ️ Đã bỏ các việc chưa bắt đầu của Muse không còn trong đội: "
                      + html.escape(", ".join(f"{t['id']} ({t['to']})" for t in dropped)))
         tasks = load_state().get("tasks") or {}
+    # Chi huy doc bao cao nhung khong ghi [[danhgia]] (2026-11-08: Muse1 ghi T32, T33 "9/10 dat" tren trang tong hop,
+    # bot van treo "cho cham"): sau CHIEF_GRADE_WAIT_SECONDS gui lai bao cao 1 lan, nhac chi lenh moi duoc tinh diem.
+    if chief_free and now >= team_retry_at.get("grade_nudge", 0):
+        stale = [t for t in tasks.values() if t["status"] == "bao" and not t.get("grade_nudged")
+                 and now - (t.get("reported_at") or t.get("updated", 0)) >= CHIEF_GRADE_WAIT_SECONDS]
+        if stale:
+            t = min(stale, key=lambda x: x.get("reported_at") or x.get("updated", 0))
+            update_state(lambda s, tid=t["id"]: s["tasks"][tid].update(grade_nudged=True))
+            team_retry_at["grade_nudge"] = now + 120  # moi lan nhac 1 viec, cach nhau it nhat 2 phut
+            team_inflight.add("report")
+            chief_free = False
+            logger.info(f"Doi Muse: {t['id']} cho cham qua {CHIEF_GRADE_WAIT_SECONDS // 60} phut -> gui lai bao cao")
+            jobs.put({"kind": "team_report", "chat": chat_of(chief, None), "tid": t["id"], "nudge": True,
+                      "why": "BOT NHẮC — bot chưa nhận lệnh chấm cho báo cáo này. Bot CHỈ tính điểm khi có dòng "
+                             f"[[danhgia: {t['id']} | điểm/10 | nhận xét]]; điểm ghi trên trang tổng hợp hay trong lời "
+                             "văn KHÔNG được tính, việc vẫn treo \"chờ chấm\". Xem lại kết quả (kèm ảnh ghép khung "
+                             "hình nếu là video) rồi chấm bằng lệnh."})
     overdue_s, quiet_s = cfg["overdue_minutes"] * 60, cfg["quiet_minutes"] * 60
     for worker in sorted({t["to"] for t in tasks.values()}):
         mine = sorted((t for t in tasks.values() if t["to"] == worker), key=lambda t: t["created"])
@@ -1981,6 +2769,8 @@ def team_tick():
                     t["queue"].append({"kind": "nhac", "text": muse_team.nudge_text(t, has_output)})
                 update_state(nudge)
                 logger.info(f"Doi Muse: {active['id']} ({worker}) im lang {quiet:.0f}s chua ghi xong -> nhac")
+                continue
+            if team_qc_return(active, tasks):  # video loi ky thuat: tra Muse lam lai, khong ton luot chi huy
                 continue
             if not chief_free or now < team_retry_at.get(f"report:{active['id']}", 0):
                 continue
@@ -2034,7 +2824,8 @@ def run_team_setup(job):
         if ok:
             team_retry_at.pop(f"setup:{profile}", None)
             update_state(lambda s: s.setdefault("team_setup", {}).__setitem__(profile, job["sig"]))
-            general_send(f"🧠 <b>Đã gửi ngôn ngữ + ngữ cảnh cho {html.escape(profile)}</b> (cập nhật bộ nhớ dài hạn).")
+            general_send(job.get("done") or f"🧠 <b>Đã gửi ngôn ngữ + ngữ cảnh cho {html.escape(profile)}</b> "
+                                             f"(cập nhật bộ nhớ dài hạn).")
             relay(chat, tg_target(chat["tg"]), seen)
         else:
             general_send(f"⚠️ Chưa gửi được ngôn ngữ + ngữ cảnh cho {html.escape(profile)}: {html.escape(str(result))}. "
@@ -2043,18 +2834,71 @@ def run_team_setup(job):
         team_inflight.discard(f"setup:{profile}")
 
 
-def team_refs(text, own):
-    """Viec da dat duoc nhac trong text (vd "bo nhan vat T5"): (doan mo ta tham chieu, file dinh kem)."""
-    tasks = load_state().get("tasks") or {}
-    refs, files = [], []
-    for rid in muse_team.task_refs(text):
-        r = tasks.get(rid)
-        if not r or rid == own or not r.get("scores"):
-            continue
-        take = [f for f in r.get("passed_files") or [] if Path(f).is_file()][:muse_team.REF_MAX_FILES - len(files)]
+def team_refs(text, task=None, worker=""):
+    """Tham chieu kem cho Muse lam: kich ban chot + video mau (vd "theo video mau M1"), viec da dat nhac trong text (vd
+    "bo nhan vat T5"), bo nhan vat da khoa hop voi mau (lenh chua nhac bo nao), khung cuoi doan truoc (viec chia
+    doan). Tra ve dict {text, files, ids, scripts {M1: v}, target}."""
+    state = load_state()
+    tasks, saved, scripts = state.get("tasks") or {}, state.get("samples") or {}, state.get("scripts") or {}
+    own = task["id"] if task else ""
+    sids = [sid for sid in video_sample.sample_refs(text) if sid in saved]
+    samples = [saved[sid] for sid in sids]
+    locks = muse_team.locked_sets(CHAR_DIR, tasks)
+    picked = [tasks[i] for i in muse_team.task_refs(text) if i in tasks and i != own]
+    picked = [r for r in picked if r.get("scores") or muse_team.is_character_set(r)]
+    look = [f for f in (task or {}).get("look_files") or [] if Path(f).is_file()]
+    if look and (task or {}).get("stage") != "hinh":  # buoc video: anh tao hinh da dat thay cho bo nhan vat khoa
+        picked.insert(0, {"id": f"{own} tạo hình", "to": task["to"], "score": (task.get("scores") or ["—"])[0],
+                          "passed_files": look,
+                          "passed_report": ["Ảnh tạo hình ĐÃ DUYỆT của chính việc này (mặt + tóc + trang phục từng giai "
+                                            "đoạn, bối cảnh): MỌI cảnh trong video phải tạo từ các ảnh này, giữ nguyên "
+                                            "mặt, tóc, quần áo."]})
+    elif samples and not any(muse_team.is_character_set(r) for r in picked):
+        lock = muse_team.pick_lock(locks, worker, sids)
+        if lock:  # chi anh nhan vat co trong kich ban chot (M1 chi Me + Bo): con cho cho anh ghep video mau
+            script = "\n".join(scripts[s]["text"] for s in sids if s in scripts)
+            lock = {**lock, "files": muse_team.lock_refs(lock["files"], script, len(lock["files"]))
+                    if script else lock["files"]}
+            base = tasks.get(lock["source"]) or {"id": lock["source"], "to": lock["owner"], "score": "",
+                                                 "status": "dat", "text": "Bộ nhân vật đã duyệt"}
+            picked.insert(0, {**base, "passed_files": lock["files"],
+                              "passed_report": [f"Bộ nhân vật đã duyệt ({muse_team.lock_label(lock)}). "
+                                                + (base.get("text") or "")]})
+        elif muse_team.character_sets(tasks).get(worker) in tasks:  # bot chua luu anh: Muse con giu trong chat
+            picked.insert(0, tasks[muse_team.character_sets(tasks)[worker]])
+    extra_files, extra_lines = [], []
+    part = (task or {}).get("part", 1)
+    if task and task.get("segment") and part > 1:
+        prev = (task.get("part_videos") or {}).get(str(part - 1))
+        frame = video_sample.last_frame(prev, team_files_dir(own) / f"doan{part - 1}_khung_cuoi.jpg") if prev else None
+        if frame:
+            extra_files.append(frame)
+            extra_lines.append(f"Ảnh \"doan{part - 1}_khung_cuoi\" bot đính kèm = khung hình CUỐI của đoạn {part - 1} "
+                               f"đã đạt: khung đầu của đoạn {part} phải nối liền ảnh này.")
+    sample_files = [video_sample.files(s, muse_team.REF_MAX_FILES) for s in samples]
+    # chua cho video mau (video + toi da 2 anh ghep moi mau) truoc khi lay anh bo nhan vat
+    reserve = min(muse_team.REF_MAX_FILES - 4, sum(min(3, len(f)) for f in sample_files)) + len(extra_files)
+    refs, files = [], list(extra_files)
+    for r in picked:
+        room = muse_team.REF_MAX_FILES - reserve - len(files) + len(extra_files)
+        mine = [f for f in r.get("passed_files") or [] if Path(f).is_file()]
+        if not mine and muse_team.is_character_set(r):  # file viec da bi don: lay bo da khoa
+            sets = locks.get(r["to"]) or []
+            hit = next((x for x in sets if x["source"] == r["id"]), None)
+            mine = hit["files"] if hit else []
+        take = mine[:max(0, room)]
         files += take
         refs.append((r, len(take)))
-    return muse_team.ref_block(refs), files, [r["id"] for r, _ in refs]
+    used = []
+    for smp, sf in zip(samples, sample_files):
+        take = sf[:max(0, muse_team.REF_MAX_FILES - len(files))]
+        files += take
+        used.append((smp, len(take)))
+    chosen = [(sid, scripts[sid]) for sid in sids if sid in scripts]
+    return {"text": muse_team.ref_block(refs, used, chosen, extra_lines), "files": files,
+            "ids": [r["id"] for r, _ in refs] + [smp["id"] for smp, _ in used],
+            "scripts": {sid: sc["v"] for sid, sc in chosen},
+            "target": video_sample.target_of(samples[0]) if samples else {}}
 
 
 def run_team_send(job):
@@ -2078,22 +2922,24 @@ def run_team_send(job):
             f"- {t['id']}: {muse_team.STATUS_LABEL[t['status']]} {t.get('score') or ''}"
             + (f" — {muse_team.short(t.get('note'), 200)}" if t.get("note") else "") for t in told) + "\n\n"
                   if told else "")
-        refs, ref_files, ref_ids = team_refs(item["text"] + ("\n" + task["text"] if kind == "tiep" else ""), tid) \
-            if kind != "nhac" else ("", [], [])
-        target = tg_target(chat["tg"])
+        ref = (team_refs(item["text"] + ("\n" + task["text"] if kind == "tiep" else ""), task, worker)
+               if kind not in ("nhac", "qc") else {"text": "", "files": [], "ids": [], "scripts": {}, "target": {}})
+        refs, ref_files, ref_ids = ref["text"], ref["files"], ref["ids"]
+        target = ref["target"] or task.get("target") or {}
+        tg = tg_target(chat["tg"])
         label = KIND_TEXT[kind] + (f" (lần {task['round']}/{cfg['max_rounds']})" if kind == "lamlai" else "")
         pl = muse_team.part_label(task)
-        send_text(target, f"📋 <b>{label} {tid}</b>{' — ' + pl if pl else ''}\n{html.escape(item['text'])}"
+        send_text(tg, f"📋 <b>{label} {tid}</b>{' — ' + pl if pl else ''}\n{html.escape(item['text'])}"
                   + (f"\n<i>Kèm tham chiếu đã duyệt: {html.escape(', '.join(ref_ids))}"
                      f" ({len(ref_files)} file)</i>" if refs else ""))
         seen = set()
-        text = muse_team.worker_text(task, kind, item["text"], cfg, prefix, refs)
+        text = muse_team.worker_text(task, kind, item["text"], cfg, prefix, refs, target)
         ok, result = muse_sync.send(chat, text, ref_files, seen=seen)
         if ok is None and ref_files:  # khong dua duoc file tham chieu vao Muse: gui chu thoi
             ok, result = muse_sync.send(chat, text + "\n(Bot không đính kèm được file tham chiếu.)", seen=seen)
         logger.info(f"Doi Muse: {kind} {tid} -> {worker} ({len(ref_files)} file tham chieu): {result}")
         if not ok:
-            safe_reply(target, f"⚠️ Chưa gửi được {tid} cho Muse: {result}. Bot sẽ thử lại.")
+            safe_reply(tg, f"⚠️ Chưa gửi được {tid} cho Muse: {result}. Bot sẽ thử lại.")
             return
         requeue = False
         now = time.time()
@@ -2102,12 +2948,16 @@ def run_team_send(job):
             t = s["tasks"][tid]
             t.update(status="lam", sent_at=now, overdue=False, fails=0, updated=now)
             if fresh:  # luot lam moi: bo ket qua luot truoc (da luu trong history / passed_files)
-                t.update(last_out=0, done="", report=[], files=[], nudged=False)
+                t.update(last_out=0, done="", report=[], files=[], nudged=False, qc=[], qc_hard=[], qc_sig="")
+            if ref["scripts"]:
+                t.setdefault("script", {}).update(ref["scripts"])
+            if ref["target"]:
+                t["target"] = ref["target"]
             for x in told:
                 s["tasks"][x["id"]]["told"] = True
         update_state(sent)
         team_retry_at.pop(f"send:{worker}", None)
-        relay(chat, target, seen)
+        relay(chat, tg, seen)
     finally:
         if requeue:
             def back(state):
@@ -2125,6 +2975,51 @@ def run_team_send(job):
         team_inflight.discard(f"send:{worker}")
 
 
+REPORT_SEND_MAX_FILES = 8  # bao cao cho chi huy: file Muse nop + anh bot kem them (anh ghep, tao hinh, bo khoa)
+CHIEF_GRADE_WAIT_SECONDS = 15 * 60  # bao cao da gui ma chi huy chua [[danhgia]] sau 15 phut: gui lai 1 lan
+
+
+def report_extras(task, state, files):
+    """Anh bot kem them vao bao cao de chi huy so bang mat (khong tin loi Muse tu khai "da QA, dong nhat"):
+    - buoc tao hinh: anh bo nhan vat khoa (nhan vat co trong kich ban) de so mat;
+    - video: anh ghep khung hinh ket qua (moi o 1 giay) + anh tao hinh da dat (hoac bo khoa).
+    Tra ve (file, dong chu cho bao cao)."""
+    room = REPORT_SEND_MAX_FILES - len(files)
+    if room <= 0:
+        return [], ""
+    tasks, scripts = state.get("tasks") or {}, state.get("scripts") or {}
+    sids = video_sample.sample_refs(task.get("text"))
+    script = "\n".join(scripts[s]["text"] for s in sids if s in scripts)
+    lock = muse_team.pick_lock(muse_team.locked_sets(CHAR_DIR, tasks), task["to"], sids)
+    lock_files = muse_team.lock_refs(lock["files"], script) if lock else []
+    if task.get("stage") == "hinh":
+        take = lock_files[:room]
+        return take, (f"Bot kèm thêm {len(take)} ảnh bộ nhân vật KHOÁ ({lock['source']} của {lock['owner']}) sau ảnh "
+                      f"của Muse: so mặt từng ảnh tạo hình với các ảnh này." if take else "")
+    vids = [f for f in files if muse_team.is_video(f)]
+    if not vids:
+        return [], ""
+    try:
+        sheets = video_sample.qa_sheets(vids[0], team_round_dir(task) / "kiem_tra")
+    except Exception as e:
+        logger.warning(f"Doi Muse: khong cat duoc khung hinh {task['id']}: {e}")
+        sheets = []
+    sheets = sheets[:room]
+    look = [f for f in task.get("look_files") or [] if Path(f).is_file()]
+    refs = (look or lock_files)[:room - len(sheets)]
+    lines = []
+    if sheets:
+        lines.append(f"Bot kèm {len(sheets)} ẢNH GHÉP KHUNG HÌNH KẾT QUẢ (bot tự cắt từ video Muse nộp, mỗi ô 1 giây, "
+                     f"góc trái ghi giây).")
+    if refs:
+        lines.append(f"Bot kèm {len(refs)} " + ("ảnh TẠO HÌNH đã duyệt của việc này" if look else
+                                               f"ảnh bộ nhân vật KHOÁ {lock['source']}") + " (file cuối).")
+    if sheets and refs:
+        lines.append("So TỪNG Ô ảnh ghép với ảnh " + ("tạo hình" if look else "bộ khoá") + ": mặt, kiểu tóc, quần áo, vóc "
+                     "người. Ô nào khác (dù 1 cảnh) → ghi giây đó, tối đa 7/10.")
+    return sheets + refs, "\n".join(lines)
+
+
 def run_team_report(job):
     tid, chat = job["tid"], job["chat"]
     team_retry_at[f"report:{tid}"] = time.time() + TEAM_RETRY_SECONDS
@@ -2138,7 +3033,9 @@ def run_team_report(job):
             return
         cfg = muse_team.config()
         files = [f for f in task["files"] if Path(f).is_file()]
-        text = muse_team.report_text(task, tasks, job["why"], cfg)
+        extra, note = report_extras(task, state, files)
+        text = muse_team.report_text(task, tasks, job["why"], cfg, note=note, scripts=state.get("scripts"))
+        files += extra
         seen = set()
         ok, result = muse_sync.send(chat, text, files, seen=seen)
         if ok is None and files:  # Muse khong nhan file: gui chu thoi
@@ -2146,9 +3043,12 @@ def run_team_report(job):
         logger.info(f"Doi Muse: bao cao {tid} -> chi huy {chat['key']} ({len(files)} file): {result}")
         if ok:
             team_retry_at.pop(f"report:{tid}", None)
+            update_state(lambda s: s["tasks"][tid].update(reported_at=time.time(),
+                                                          grade_nudged=bool(job.get("nudge"))))
             pl = muse_team.part_label(task)
             general_send(f"📨 <b>{tid}</b> ({html.escape(task['to'])}){' ' + pl if pl else ''}: "
-                         f"{html.escape(job['why'])} Đã gửi kết quả cho chỉ huy chấm"
+                         + ("chỉ huy chưa ghi lệnh chấm, bot gửi lại báo cáo để chấm" if job.get("nudge")
+                            else f"{html.escape(job['why'])} Đã gửi kết quả cho chỉ huy chấm")
                          + (f" (kèm {len(files)} file)." if files else "."))
             relay(chat, tg_target(chat["tg"]), seen)
     finally:
@@ -2296,7 +3196,8 @@ COMMANDS = [
     ("setup", "Gắn nhóm này với bot (gõ trong nhóm đã bật Chủ đề)", "group"),
     ("gan", "Gõ trong topic: gán topic với profile (trùng tên thì gán luôn, không thì chọn)", "group"),
     ("kiemtra", "Kiểm tra IP từng profile, cảnh báo IP Việt Nam", "both"),
-    ("reset", "Xoá toàn bộ dữ liệu Muse của 1 profile và topic của nó (có nút xác nhận)", "both"),
+    ("reset", "Xoá dữ liệu Muse của 1 profile (trong topic); ở General: reset cả đội + chọn ngữ cảnh", "both"),
+    ("tach", "Tách 1 Muse thành viên khỏi đội (gõ trong topic của Muse, /tach tên, hoặc chọn ở General)", "both"),
     ("tiendo", "Bảng việc của đội Muse (chế độ có chỉ huy)", "both"),
     ("ketqua", "Xem ảnh/video kết quả 1 việc của đội Muse, vd /ketqua T8", "both"),
     ("allow_on", "Bật tự bấm Allow khi Muse xin quyền", "both"),
@@ -2420,6 +3321,10 @@ def register_handlers():
         arg = m.text.partition(" ")[2].strip()
         profile = chat["profile"] if chat else next((p for p in muse_sync.fox_profiles()
                                                      if p.casefold() == arg.casefold()), None) if arg else None
+        chief, _ = team_reset_people()
+        if profile and profile == chief:  # reset tu chi huy: ca doi, chon ngu canh thiet lap lai
+            ask_team_reset(m)
+            return
         if profile:
             ask_reset(m, profile)
             return
@@ -2427,6 +3332,35 @@ def register_handlers():
         bot.reply_to(m, ("Không có profile tên " + html.escape(arg) + ". " if arg else "")
                      + "Gõ /reset trong <b>topic của profile</b> cần reset, hoặc <code>/reset tên_profile</code>.\n"
                        f"Các profile: {html.escape(names)}", parse_mode="HTML")
+
+    @bot.message_handler(commands=["tach"])
+    def _tach(m):
+        if not is_admin(m.from_user):
+            bot.reply_to(m, "Chỉ chủ bot mới tách được Muse khỏi đội.")
+            return
+        chief, workers = team_reset_people()
+        if not chief:
+            bot.reply_to(m, "Đội Muse đang ở chế độ Độc lập, không có đội để tách Muse ra.")
+            return
+        arg, chat = m.text.partition(" ")[2].strip(), target_for(m)
+        if arg:
+            profile = next((p for p in workers + sorted(topics()) + [chief] if p.casefold() == arg.casefold()), arg)
+        else:
+            profile = chat["profile"] if chat and chat["profile"] != chief else None
+        if profile:
+            err = detach_check(profile)
+            if err:
+                bot.reply_to(m, err, parse_mode="HTML")
+                return
+            ask_detach(m, profile)
+            return
+        # o General / chat rieng khong ghi ten: chon Muse tu danh sach thanh vien
+        kb = types.InlineKeyboardMarkup(row_width=2)
+        kb.add(*[types.InlineKeyboardButton(w, callback_data=f"{DETACH_DATA}ask:{w}") for w in workers
+                 if len(f"{DETACH_DATA}ask:{w}".encode()) <= 64])
+        kb.add(types.InlineKeyboardButton("Huỷ", callback_data=f"{DETACH_DATA}no"))
+        bot.send_message(m.chat.id, f"✂️ <b>Tách Muse nào khỏi đội?</b> (chỉ huy {html.escape(chief)})",
+                         parse_mode="HTML", reply_markup=kb, message_thread_id=topic_of(m))
 
     @bot.message_handler(commands=["tiendo"])
     def _tiendo(m):
@@ -2511,6 +3445,10 @@ def register_handlers():
             bot.answer_callback_query(c.id, "Đã chọn rồi.")
         elif c.data.startswith(RESET_DATA):
             on_reset_button(c)
+        elif c.data.startswith(TEAM_RESET_DATA):
+            on_team_reset_button(c)
+        elif c.data.startswith(DETACH_DATA):
+            on_detach_button(c)
         elif c.data.startswith(LINK_DATA):
             on_link_button(c)
         elif c.data.startswith(TEAM_DATA):

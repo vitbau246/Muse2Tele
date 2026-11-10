@@ -475,10 +475,11 @@ const I18N = {
     team_quiet: "Số phút im lặng", team_quiet_hint: "Muse đang làm mà rảnh và im lặng chừng này phút chưa báo xong: bot nhắc 1 lần, sau đó báo chỉ huy.", team_overdue: "Báo quá hạn sau (phút)",
     team_one_video: "Video nộp từng cái một", team_one_video_explain: "Muse chỉ gửi 1 video cho chỉ huy chấm; video đạt mới làm video tiếp.",
     team_show_failed: "Gửi cả ảnh/video chưa đạt lên Telegram", team_show_failed_explain: "Tắt (khuyến nghị): việc chưa đạt chỉ gửi chữ kết quả và số lần chưa đạt; ảnh/video lên Telegram khi đạt. Xem sớm bằng /ketqua T8.",
-    team_reset: "Xoá dữ liệu Muse khi lưu (khuyến nghị để hoạt động tốt nhất)", team_reset_explain: "Xoá lịch sử chat, file, artifact của chỉ huy và các Muse trong đội (kèm tin nhắn trong topic của chúng) để cả đội bắt đầu sạch, không lẫn thông tin cũ. Không hoàn tác.",
+    team_reset: "Xoá dữ liệu Muse khi lưu (tự tick khi đổi ngữ cảnh)", team_reset_who: "Sẽ xoá dữ liệu Muse của: {names}.", team_reset_template: "Đổi mẫu: bot bỏ luôn các việc, video mẫu, kịch bản chốt và cất bộ nhân vật khoá cũ vào thư mục lưu trữ.", team_reset_explain: "Muse đổi ngữ cảnh được xoá lịch sử chat, file, artifact (kèm tin trong topic) rồi mới nhận ngữ cảnh mới, để không lẫn thông tin cũ. Không đổi ngữ cảnh mà vẫn tick thì xoá chỉ huy và cả đội. Không hoàn tác.",
     team_reset_confirm: "Xoá vĩnh viễn dữ liệu Muse của: {names}?\n\nLịch sử chat, file, artifact và tin nhắn trong topic bị xoá, không khôi phục được. Bỏ tick \"Xoá dữ liệu Muse\" nếu chỉ muốn lưu cài đặt.",
-    team_saved_reset: "Đã lưu đội Muse. Bot đang xoá dữ liệu Muse của cả đội rồi giới thiệu lại đội cho chỉ huy.", team_number_error: "{label}: nhập số nguyên từ {lo} đến {hi}.",
-    post_map_per_day: "Tối đa bài/ngày", post_map_per_day_hint: "0 = không giới hạn; Facebook và TikTok tính riêng", post_map_hours: "Khung giờ đăng", post_map_hours_hint: "vd 11-13, 19-23; trống = lúc nào cũng đăng", post_map_caption_lang: "Ngôn ngữ caption", post_map_caption_lang_hint: "Đội Muse viết thêm caption bằng ngôn ngữ này cho video đăng qua profile này", post_map_check: "Kiểm tra tài khoản", post_map_checking: "Đang kiểm tra (mở profile, không đăng gì)…", post_map_check_at: "Kiểm tra lúc {at}:", post_map_check_fb_ok: "Facebook đúng: quản lý đủ {count} Trang đã map", post_map_check_fb_found: "Facebook: tài khoản quản lý {count} Trang", post_map_check_fb_missing: "Facebook: tài khoản KHÔNG quản lý Trang {ids}", post_map_check_tt_ok: "TikTok đúng: @{account}", post_map_check_tt_found: "TikTok: đang đăng nhập @{account}", post_map_check_tt_bad: "TikTok: đang đăng nhập @{account}, bảng ghi @{expected}", post_map_check_login: "{site}: chưa đăng nhập", post_map_check_error: "{site}: lỗi — {message}", team_post_label: "Đăng video đạt", team_post_off: "Không đăng", team_post_off_explain: "Video đạt chỉ gửi vào topic của Muse như trước.", team_post_ask: "Hỏi trước (nút Đăng)", team_post_ask_explain: "Mỗi video đạt hiện trong General kèm nút 📤 cho từng kênh trong Bảng đăng bài (ghi rõ Trang và TikTok). Bấm nút nào thì video vào hàng đợi đăng của profile đó.", team_post_auto: "Tự động qua kênh mặc định", team_post_auto_explain: "Video đạt tự vào hàng đợi đăng của kênh mặc định; chưa chọn kênh thì bot hỏi như trên.", team_post_profile: "Kênh đăng mặc định", team_post_profile_none: "Chưa chọn (hỏi mỗi lần)", team_post_unmapped: "Profile này chưa có Trang / TikTok trong Bảng đăng bài.", post_map_button: "Bảng đăng bài", post_map_title: "Bảng đăng bài", post_map_sub: "Profile nào đăng lên Trang Facebook nào (theo Page ID) và tài khoản TikTok nào. Lưu vào {path}.", post_map_explain: "Tự động đăng chỉ đăng lên đúng các Trang ghi ở đây (không còn đăng lên mọi Trang tài khoản quản lý) và dừng nếu tài khoản đang đăng nhập ở profile không khớp. Mỗi Page ID / tài khoản TikTok chỉ thuộc 1 profile. Profile tick tự động đăng mà chưa map thì chờ, không đăng gì.", post_map_pages: "Page ID Facebook", post_map_pages_hint: "Nhiều Trang: cách nhau bởi dấu phẩy. Page ID là dãy số asset_id trong link Meta Business Suite.", post_map_tiktok: "Tài khoản TikTok", post_map_tiktok_hint: "@username hoặc link trang TikTok", post_map_known: "Trang tài khoản này quản lý:", post_map_known_none: "Chưa quét Trang: chạy fanpage_post.py --profile <tên> --list-pages.", post_map_auto: "Tự đăng: {targets}", post_map_auto_off: "Không tự đăng", post_map_missing: "Đang tick tự đăng {target} nhưng chưa map: sẽ không đăng.", post_map_saved: "Đã lưu bảng đăng bài.", post_map_none: "Chưa có profile nào.", team_task_lang_label: "Ngôn ngữ giao việc", team_task_lang_explain: "Chỉ huy viết việc giao, tin nhắn và nhận xét chấm cho đội bằng ngôn ngữ này. Muse có ngôn ngữ riêng (phần Ngôn ngữ và ngữ cảnh) nhận việc bằng ngôn ngữ của Muse đó.", team_setup_label: "Ngôn ngữ và ngữ cảnh", team_setup_explain: "Ngôn ngữ: Muse trả lời bằng ngôn ngữ nào. Ngữ cảnh: bộ nhớ dài hạn của Muse (vai trò, bối cảnh, luật, cách làm). Bot gửi cho Muse 1 lần dạng \"Cập nhật bộ nhớ dài hạn\", gửi lại khi bạn sửa hoặc sau khi xoá dữ liệu. Để trống nếu không cần.", team_setup_lang: "Ngôn ngữ", team_setup_context: "Ngữ cảnh (bộ nhớ dài hạn)", team_setup_open: "Ngữ cảnh", team_setup_template: "Mẫu", team_setup_template_pick: "Điền theo mẫu", team_setup_replace: "Thay ngữ cảnh đang có của {name} bằng mẫu?", team_setup_chief: "Chỉ huy: {name}", team_setup_too_long: "Ngữ cảnh của {name} dài quá {max} ký tự.",
+    team_saved_reset: "Đã lưu đội Muse. Bot đang xoá dữ liệu Muse của cả đội rồi giới thiệu lại đội cho chỉ huy.", team_full_reset: "Reset đội", team_full_reset_hint: "Đưa mọi thiết lập đội về mặc định và xoá dữ liệu các Muse", team_full_reset_confirm: "Reset toàn bộ đội Muse?\n\nMọi thiết lập về mặc định (từng Muse làm riêng, bỏ chỉ huy, vai trò, ngôn ngữ, ngữ cảnh, đăng video, thông số chấm).\nBot xoá vĩnh viễn dữ liệu Muse (chat, file, artifact, tin trong topic) của: {names}; bỏ mọi việc, video mẫu, kịch bản chốt; chuyển các bộ nhân vật khoá vào thư mục lưu trữ.\n\nKhông hoàn tác.", team_full_reset_none: "(không có Muse nào)", team_full_reset_done: "Đã reset đội Muse về mặc định. Bot đang xoá dữ liệu Muse của: {names}. Thiết lập lại đội từ đầu.", team_number_error: "{label}: nhập số nguyên từ {lo} đến {hi}.",
+    team_detach_hint: "Tách Muse này khỏi đội", team_detach_explain: "{name} rời đội ngay (không cần bấm Lưu): chỉ huy không giao việc cho Muse này nữa và được giới thiệu lại đội, vai trò và ngữ cảnh đội của {name} bị bỏ, mọi việc đang mở của {name} bị huỷ, kể cả việc đang làm. Muốn cho vào đội lại thì tick lại.", team_detach_wipe: "Xoá luôn dữ liệu Muse (chat, file, artifact, tin trong topic) để Muse không còn nhớ gì của đội. Không hoàn tác. Không tick: bot nhắn Muse rằng nó đã rời đội.", team_detach_go: "Tách {name} khỏi đội", team_detach_confirm: "Tách {name} khỏi đội và xoá vĩnh viễn dữ liệu Muse của {name}?\n\nLịch sử chat, file, artifact và tin nhắn trong topic bị xoá, không khôi phục được.", team_detach_done: "Đã tách {name} khỏi đội. Bot huỷ các việc đang mở, nhắn Muse đã rời đội và giới thiệu lại đội cho chỉ huy.", team_detach_done_wipe: "Đã tách {name} khỏi đội. Bot huỷ các việc đang mở, xoá dữ liệu Muse và giới thiệu lại đội cho chỉ huy.",
+    post_map_per_day: "Tối đa bài/ngày", post_map_per_day_hint: "0 = không giới hạn; Facebook và TikTok tính riêng", post_map_hours: "Khung giờ đăng", post_map_hours_hint: "vd 11-13, 19-23; trống = lúc nào cũng đăng", post_map_caption_lang: "Ngôn ngữ caption", post_map_caption_lang_hint: "Đội Muse viết thêm caption bằng ngôn ngữ này cho video đăng qua profile này", post_map_check: "Kiểm tra tài khoản", post_map_checking: "Đang kiểm tra (mở profile, không đăng gì)…", post_map_check_at: "Kiểm tra lúc {at}:", post_map_check_fb_ok: "Facebook đúng: quản lý đủ {count} Trang đã map", post_map_check_fb_found: "Facebook: tài khoản quản lý {count} Trang", post_map_check_fb_missing: "Facebook: tài khoản KHÔNG quản lý Trang {ids}", post_map_check_tt_ok: "TikTok đúng: @{account}", post_map_check_tt_found: "TikTok: đang đăng nhập @{account}", post_map_check_tt_bad: "TikTok: đang đăng nhập @{account}, bảng ghi @{expected}", post_map_check_login: "{site}: chưa đăng nhập", post_map_check_error: "{site}: lỗi — {message}", team_post_label: "Đăng video đạt", team_post_off: "Không đăng", team_post_off_explain: "Video đạt chỉ gửi vào topic của Muse như trước.", team_post_ask: "Hỏi trước (nút Đăng)", team_post_ask_explain: "Mỗi video đạt hiện trong General kèm nút 📤 cho từng kênh trong Bảng đăng bài (ghi rõ Trang và TikTok). Bấm nút nào thì video vào hàng đợi đăng của profile đó.", team_post_auto: "Tự động qua kênh mặc định", team_post_auto_explain: "Video đạt tự vào hàng đợi đăng của kênh mặc định; chưa chọn kênh thì bot hỏi như trên.", team_post_profile: "Kênh đăng mặc định", team_post_profile_none: "Chưa chọn (hỏi mỗi lần)", team_post_unmapped: "Profile này chưa có Trang / TikTok trong Bảng đăng bài.", post_map_button: "Bảng đăng bài", post_map_title: "Bảng đăng bài", post_map_sub: "Profile nào đăng lên Trang Facebook nào (theo Page ID) và tài khoản TikTok nào. Lưu vào {path}.", post_map_explain: "Tự động đăng chỉ đăng lên đúng các Trang ghi ở đây (không còn đăng lên mọi Trang tài khoản quản lý) và dừng nếu tài khoản đang đăng nhập ở profile không khớp. Mỗi Page ID / tài khoản TikTok chỉ thuộc 1 profile. Profile tick tự động đăng mà chưa map thì chờ, không đăng gì.", post_map_pages: "Page ID Facebook", post_map_pages_hint: "Nhiều Trang: cách nhau bởi dấu phẩy. Page ID là dãy số asset_id trong link Meta Business Suite.", post_map_tiktok: "Tài khoản TikTok", post_map_tiktok_hint: "@username hoặc link trang TikTok", post_map_known: "Trang tài khoản này quản lý:", post_map_known_none: "Chưa quét Trang: chạy fanpage_post.py --profile <tên> --list-pages.", post_map_auto: "Tự đăng: {targets}", post_map_auto_off: "Không tự đăng", post_map_missing: "Đang tick tự đăng {target} nhưng chưa map: sẽ không đăng.", post_map_saved: "Đã lưu bảng đăng bài.", post_map_none: "Chưa có profile nào.", team_task_lang_label: "Ngôn ngữ giao việc", team_task_lang_explain: "Chỉ huy viết việc giao, tin nhắn và nhận xét chấm cho đội bằng ngôn ngữ này. Muse có ngôn ngữ riêng (phần Ngôn ngữ và ngữ cảnh) nhận việc bằng ngôn ngữ của Muse đó.", team_setup_label: "Ngôn ngữ và ngữ cảnh", team_setup_explain: "Ngôn ngữ: Muse trả lời bằng ngôn ngữ nào. Ngữ cảnh: bộ nhớ dài hạn của Muse (vai trò, bối cảnh, luật, cách làm). Bot gửi cho Muse 1 lần dạng \"Cập nhật bộ nhớ dài hạn\", gửi lại khi bạn sửa hoặc sau khi xoá dữ liệu. Để trống nếu không cần.", team_setup_lang: "Ngôn ngữ", team_setup_context: "Ngữ cảnh (bộ nhớ dài hạn)", team_setup_open: "Ngữ cảnh", team_setup_template: "Mẫu", team_setup_template_pick: "Điền mẫu cho cả đội (chỉ huy: nghiên cứu, phân tích, viết kịch bản chi tiết; thành viên: xây dựng nhân vật và làm video theo kịch bản):", team_setup_replace: "Thay ngữ cảnh đang có của {names} bằng mẫu?", team_setup_chief: "Chỉ huy: {name}", team_setup_too_long: "Ngữ cảnh của {name} dài quá {max} ký tự.",
     update_check: "Kiểm tra cập nhật", update_available: "Đã có phiên bản mới của Muse2Tele", update_open: "Xem thay đổi & cập nhật",
     update_title: "Cập nhật Muse2Tele", update_versions: "Đang dùng: {local} → bản mới: {remote} ({date})", update_unknown: "chưa rõ (bản tải ZIP)",
     update_changes: "Có gì mới", update_no_changes: "Không có danh sách thay đổi.",
@@ -570,10 +571,11 @@ const I18N = {
     team_quiet: "Quiet minutes", team_quiet_hint: "A working Muse idle and silent this long without saying it is done gets one reminder, then is reported to the chief.", team_overdue: "Overdue after (minutes)",
     team_one_video: "Videos one at a time", team_one_video_explain: "A Muse sends the chief one video at a time and starts the next one only after it passes.",
     team_show_failed: "Post failed images / videos to Telegram", team_show_failed_explain: "Off (recommended): until the work passes, Telegram only gets the text result and how many times it failed; images and videos are posted once they pass. See them early with /ketqua T8.",
-    team_reset: "Wipe Muse data on save (recommended for best results)", team_reset_explain: "Deletes the chats, files and artifacts of the chief and every Muse in the team, with the messages in their topics, so the team starts clean with no old information mixed in. Cannot be undone.",
+    team_reset: "Wipe Muse data on save (ticked by itself when a context changes)", team_reset_who: "Wipes the Muse data of: {names}.", team_reset_template: "Template switched: the bot also drops the tasks, sample videos and scripts and archives the old locked character sets.", team_reset_explain: "A Muse whose context changed has its chats, files and artifacts (and its topic messages) deleted before it gets the new context, so no old information is mixed in. Ticked with no context change: the chief and the whole team are wiped. Cannot be undone.",
     team_reset_confirm: "Permanently wipe the Muse data of: {names}?\n\nChats, files, artifacts and the messages in their topics are deleted and cannot be restored. Untick \"Wipe Muse data\" to only save the settings.",
-    team_saved_reset: "Muse team saved. The bot is wiping the team's Muse data, then briefs the chief again.", team_number_error: "{label}: enter a whole number from {lo} to {hi}.",
-    post_map_per_day: "Posts per day", post_map_per_day_hint: "0 = no limit; Facebook and TikTok counted apart", post_map_hours: "Posting hours", post_map_hours_hint: "e.g. 11-13, 19-23; empty = any time", post_map_caption_lang: "Caption language", post_map_caption_lang_hint: "The Muse team writes an extra caption in this language for videos posted here", post_map_check: "Check accounts", post_map_checking: "Checking (opens the profile, posts nothing)…", post_map_check_at: "Checked {at}:", post_map_check_fb_ok: "Facebook OK: manages all {count} mapped Pages", post_map_check_fb_found: "Facebook: manages {count} Pages", post_map_check_fb_missing: "Facebook: the account does NOT manage Page(s) {ids}", post_map_check_tt_ok: "TikTok OK: @{account}", post_map_check_tt_found: "TikTok: logged in as @{account}", post_map_check_tt_bad: "TikTok: logged in as @{account}, the map says @{expected}", post_map_check_login: "{site}: not logged in", post_map_check_error: "{site}: error — {message}", team_post_label: "Post passed videos", team_post_off: "Do not post", team_post_off_explain: "Passed videos only go to the Muse's topic, as before.", team_post_ask: "Ask first (Post buttons)", team_post_ask_explain: "Each passed video shows in General with a 📤 button per channel in the Posting map (with its Pages and TikTok). The button you press puts the video in that profile's posting queue.", team_post_auto: "Automatically to the default channel", team_post_auto_explain: "Passed videos go straight into the default channel's posting queue; with no default channel the bot asks as above.", team_post_profile: "Default channel", team_post_profile_none: "None (ask each time)", team_post_unmapped: "This profile has no Page or TikTok in the Posting map yet.", post_map_button: "Posting map", post_map_title: "Posting map", post_map_sub: "Which Facebook Pages (by Page ID) and TikTok account each profile posts to. Saved to {path}.", post_map_explain: "Auto-post only posts to the Pages listed here (never to every Page the account manages) and stops when the account logged in on the profile does not match. A Page ID or TikTok account can belong to one profile only. A profile ticked for auto-post with nothing mapped waits and posts nothing.", post_map_pages: "Facebook Page IDs", post_map_pages_hint: "Several Pages: separate with commas. The Page ID is the asset_id number in Meta Business Suite links.", post_map_tiktok: "TikTok account", post_map_tiktok_hint: "@username or the TikTok profile link", post_map_known: "Pages found on this account:", post_map_known_none: "Pages not scanned yet: run fanpage_post.py --profile <name> --list-pages.", post_map_auto: "Auto-post: {targets}", post_map_auto_off: "Auto-post off", post_map_missing: "Auto-post to {target} is ticked but nothing is mapped: it will not post.", post_map_saved: "Posting map saved.", post_map_none: "No profile yet.", team_task_lang_label: "Task language", team_task_lang_explain: "The chief writes tasks, messages and review notes for the team in this language. A Muse with its own language (under Language and context) gets its tasks in that language.", team_setup_label: "Language and context", team_setup_explain: "Language: what the Muse answers in. Context: its long-term memory (who it is, the story world, rules, how to work). The bot sends it to the Muse once as a long-term memory update, and again when you change it or after a wipe. Leave empty if not needed.", team_setup_lang: "Language", team_setup_context: "Context (long-term memory)", team_setup_open: "Context", team_setup_template: "Template", team_setup_template_pick: "Fill in a template", team_setup_replace: "Replace the context of {name} with the template?", team_setup_chief: "Chief: {name}", team_setup_too_long: "Context of {name} is longer than {max} characters.",
+    team_saved_reset: "Muse team saved. The bot is wiping the team's Muse data, then briefs the chief again.", team_full_reset: "Reset team", team_full_reset_hint: "Put every team setting back to its default and wipe the Muses", team_full_reset_confirm: "Reset the whole Muse team?\n\nEvery setting goes back to its default (each Muse on its own, no chief, roles, languages, contexts, posting or review settings).\nThe bot permanently wipes the Muse data (chats, files, artifacts, topic messages) of: {names}, drops every task, sample video and locked script, and moves the locked character sets to an archive folder.\n\nCannot be undone.", team_full_reset_none: "(no Muse)", team_full_reset_done: "Muse team reset to defaults. The bot is wiping the Muse data of: {names}. Set the team up again.", team_number_error: "{label}: enter a whole number from {lo} to {hi}.",
+    team_detach_hint: "Take this Muse out of the team", team_detach_explain: "{name} leaves the team now (no need to press Save): the chief stops giving it tasks and is briefed again, its role and team context are dropped, and every open task of {name} is cancelled, the running one too. Tick it again later to bring it back.", team_detach_wipe: "Also wipe its Muse data (chats, files, artifacts, topic messages) so nothing of the team stays in its memory. Cannot be undone. Unticked: the bot tells the Muse it left the team.", team_detach_go: "Take {name} out", team_detach_confirm: "Take {name} out of the team and permanently wipe its Muse data?\n\nChats, files, artifacts and the messages in its topic are deleted and cannot be restored.", team_detach_done: "{name} taken out of the team. The bot cancels its open tasks, tells it it left the team and briefs the chief again.", team_detach_done_wipe: "{name} taken out of the team. The bot cancels its open tasks, wipes its Muse data and briefs the chief again.",
+    post_map_per_day: "Posts per day", post_map_per_day_hint: "0 = no limit; Facebook and TikTok counted apart", post_map_hours: "Posting hours", post_map_hours_hint: "e.g. 11-13, 19-23; empty = any time", post_map_caption_lang: "Caption language", post_map_caption_lang_hint: "The Muse team writes an extra caption in this language for videos posted here", post_map_check: "Check accounts", post_map_checking: "Checking (opens the profile, posts nothing)…", post_map_check_at: "Checked {at}:", post_map_check_fb_ok: "Facebook OK: manages all {count} mapped Pages", post_map_check_fb_found: "Facebook: manages {count} Pages", post_map_check_fb_missing: "Facebook: the account does NOT manage Page(s) {ids}", post_map_check_tt_ok: "TikTok OK: @{account}", post_map_check_tt_found: "TikTok: logged in as @{account}", post_map_check_tt_bad: "TikTok: logged in as @{account}, the map says @{expected}", post_map_check_login: "{site}: not logged in", post_map_check_error: "{site}: error — {message}", team_post_label: "Post passed videos", team_post_off: "Do not post", team_post_off_explain: "Passed videos only go to the Muse's topic, as before.", team_post_ask: "Ask first (Post buttons)", team_post_ask_explain: "Each passed video shows in General with a 📤 button per channel in the Posting map (with its Pages and TikTok). The button you press puts the video in that profile's posting queue.", team_post_auto: "Automatically to the default channel", team_post_auto_explain: "Passed videos go straight into the default channel's posting queue; with no default channel the bot asks as above.", team_post_profile: "Default channel", team_post_profile_none: "None (ask each time)", team_post_unmapped: "This profile has no Page or TikTok in the Posting map yet.", post_map_button: "Posting map", post_map_title: "Posting map", post_map_sub: "Which Facebook Pages (by Page ID) and TikTok account each profile posts to. Saved to {path}.", post_map_explain: "Auto-post only posts to the Pages listed here (never to every Page the account manages) and stops when the account logged in on the profile does not match. A Page ID or TikTok account can belong to one profile only. A profile ticked for auto-post with nothing mapped waits and posts nothing.", post_map_pages: "Facebook Page IDs", post_map_pages_hint: "Several Pages: separate with commas. The Page ID is the asset_id number in Meta Business Suite links.", post_map_tiktok: "TikTok account", post_map_tiktok_hint: "@username or the TikTok profile link", post_map_known: "Pages found on this account:", post_map_known_none: "Pages not scanned yet: run fanpage_post.py --profile <name> --list-pages.", post_map_auto: "Auto-post: {targets}", post_map_auto_off: "Auto-post off", post_map_missing: "Auto-post to {target} is ticked but nothing is mapped: it will not post.", post_map_saved: "Posting map saved.", post_map_none: "No profile yet.", team_task_lang_label: "Task language", team_task_lang_explain: "The chief writes tasks, messages and review notes for the team in this language. A Muse with its own language (under Language and context) gets its tasks in that language.", team_setup_label: "Language and context", team_setup_explain: "Language: what the Muse answers in. Context: its long-term memory (who it is, the story world, rules, how to work). The bot sends it to the Muse once as a long-term memory update, and again when you change it or after a wipe. Leave empty if not needed.", team_setup_lang: "Language", team_setup_context: "Context (long-term memory)", team_setup_open: "Context", team_setup_template: "Template", team_setup_template_pick: "Fill the whole team from a template (chief: research, analysis, detailed scripts; members: characters and videos from the script):", team_setup_replace: "Replace the current context of {names} with the template?", team_setup_chief: "Chief: {name}", team_setup_too_long: "Context of {name} is longer than {max} characters.",
     update_check: "Check for updates", update_available: "A new version of Muse2Tele is available", update_open: "See changes & update",
     update_title: "Update Muse2Tele", update_versions: "Installed: {local} → new: {remote} ({date})", update_unknown: "unknown (ZIP download)",
     update_changes: "What's new", update_no_changes: "No change list available.",
@@ -1255,7 +1257,31 @@ async function openTeam() {
       input.value = cfg.roles[n] || "";
       const box = h("input", { type: "checkbox", title: t("team_member_hint"), "aria-label": t("team_member_hint") + ": " + n });
       box.checked = !(cfg.excluded || []).includes(n);
-      roles[n] = h("div", { class: "field member" }, h("label", { class: "check" }, box, h("span", {}, n)), input);
+      const head = h("label", { class: "check" }, box, h("span", {}, n));
+      // Tach khoi doi (ap dung ngay, khong can Luu): chi Muse dang trong doi theo cai dat da luu
+      if (cfg.mode !== "chief" || n === cfg.chief || (cfg.excluded || []).includes(n)) {
+        roles[n] = h("div", { class: "field member" }, head, input);
+        return;
+      }
+      const wipe = h("input", { type: "checkbox" });
+      const go = h("button", { type: "button", class: "btn btn-danger" }, "✂ " + t("team_detach_go", { name: n }));
+      const panel = h("div", { class: "box", style: "display:none;margin-top:8px;border-color:var(--err)" },
+        h("p", { style: "margin:0 0 8px;font-size:13px" }, t("team_detach_explain", { name: n })),
+        h("label", { class: "opt" }, wipe, h("div", {}, h("span", {}, t("team_detach_wipe")))),
+        h("div", { style: "display:flex;gap:8px;margin-top:8px" }, go,
+          h("button", { type: "button", class: "btn btn-line", onclick: () => { panel.style.display = "none"; } }, t("cancel"))));
+      go.addEventListener("click", async () => {
+        if (wipe.checked && !confirm(t("team_detach_confirm", { name: n }))) return;
+        go.disabled = true;
+        try {
+          await api("POST", "/settings/muse-team/detach", { profile: n, wipe: wipe.checked });
+          close(); toast(t(wipe.checked ? "team_detach_done_wipe" : "team_detach_done", { name: n }));
+        } catch (err) { msg.className = "msg err"; msg.textContent = err.message; go.disabled = false; }
+      });
+      const cut = h("button", { type: "button", class: "icon-btn danger", title: t("team_detach_hint"), "aria-label": t("team_detach_hint") + ": " + n,
+        onclick: () => { panel.style.display = panel.style.display === "none" ? "" : "none"; } }, "✂");
+      roles[n] = h("div", { class: "field member" },
+        h("div", { style: "display:flex;align-items:center;gap:6px" }, head, h("span", { style: "flex:1" }), cut), input, panel);
     });
     const rolesBox = h("div");
     const channels = cfg.profiles.slice();
@@ -1278,26 +1304,30 @@ async function openTeam() {
       area.value = item.context || "";
       const label = () => { const c = area.value.trim().length; return t("team_setup_open") + (c ? " (" + c + ")" : "") + (area.style.display === "none" ? " ▾" : " ▴"); };
       const open = h("button", { type: "button", class: "btn btn-ghost" });
-      const tpls = h("div", { style: "display:none;margin-top:6px;gap:6px;flex-wrap:wrap;align-items:center" },
-        h("span", { class: "hint", style: "margin:0" }, t("team_setup_template_pick")),
-        (cfg.templates || []).map((tp) => h("button", { type: "button", class: "btn btn-line", onclick: () => {
-          if (area.value.trim() && !confirm(t("team_setup_replace", { name: n }))) return;
-          area.value = tp.text;
-          if (!lang.value) lang.value = "vi";
-          open.textContent = label();
-        } }, "✨ " + tp.label)));
       open.addEventListener("click", () => {
-        const show = area.style.display === "none";
-        area.style.display = show ? "" : "none";
-        tpls.style.display = show ? "flex" : "none";
+        area.style.display = area.style.display === "none" ? "" : "none";
         open.textContent = label();
       });
-      area.addEventListener("input", () => { open.textContent = label(); });
+      area.addEventListener("input", () => { open.textContent = label(); autoReset(); });
       open.textContent = label();
-      setups[n] = { head, lang, area, box: h("div", { class: "box", style: "margin-bottom:10px" }, head,
-        h("div", { style: "display:flex;gap:8px;align-items:center;flex-wrap:wrap" }, lang, open), tpls, area) };
+      const fill = (text) => { area.value = text; if (!lang.value) lang.value = "vi"; open.textContent = label(); };
+      setups[n] = { head, lang, area, fill, box: h("div", { class: "box", style: "margin-bottom:10px" }, head,
+        h("div", { style: "display:flex;gap:8px;align-items:center;flex-wrap:wrap" }, lang, open), area) };
     });
     const setupBox = h("div");
+    // Mau ca doi: 1 lan bam dien ngu canh chi huy cho chi huy, ngu canh thanh vien cho moi Muse dang tick (+ vai tro trong)
+    const teamTpl = h("div", { style: "margin-bottom:10px" },
+      h("p", { class: "hint", style: "margin:0 0 6px" }, t("team_setup_template_pick")),
+      h("div", { style: "display:flex;gap:6px;flex-wrap:wrap" }, (cfg.templates || []).map((tp) => h("button", { type: "button", class: "btn btn-line", onclick: () => {
+        const lead = chief.value;
+        const members = Object.entries(roles).filter(([m, el]) => m !== lead && el.querySelector("input[type=checkbox]").checked).map(([m]) => m);
+        const want = [...(lead && setups[lead] ? [[lead, tp.chief]] : []), ...members.filter((m) => setups[m]).map((m) => [m, tp.member])];
+        const busy = want.filter(([m, text]) => { const v = setups[m].area.value.trim(); return v && v !== text.trim(); }).map(([m]) => m);
+        if (busy.length && !confirm(t("team_setup_replace", { names: busy.join(", ") }))) return;
+        want.forEach(([m, text]) => setups[m].fill(text));
+        templateUsed = true; autoReset();
+        members.forEach((m) => { const input = roles[m].querySelector("input:not([type])"); if (tp.member_role && !input.value.trim()) input.value = tp.member_role; });
+      } }, "✨ " + tp.label))));
     const rolesNone = h("div", { class: "hint" }, t("team_roles_none"));
     // Thong so duyet ket qua: [khoa, nhan, min, max, goi y]
     const NUMS = [["pass_score", "team_pass_score", 1, 10, "team_pass_score_hint"], ["max_rounds", "team_max_rounds", 1, 10, "team_max_rounds_hint"],
@@ -1316,7 +1346,25 @@ async function openTeam() {
     };
     const [oneVideo, oneVideoRow] = tick(cfg.one_video, t("team_one_video"), t("team_one_video_explain"));
     const [showFailed, showFailedRow] = tick(cfg.show_failed_media, t("team_show_failed"), t("team_show_failed_explain"));
-    const [reset, resetRow] = tick(true, t("team_reset"), t("team_reset_explain"));
+    // Xoa du lieu Muse khi luu: tu tick khi doi ngu canh (chi xoa Muse doi ngu canh); chu tu bam o nay thi thoi tu dong.
+    // Doi mau: bot bo ca viec, video mau, kich ban va cat bo nhan vat cu.
+    const [reset, resetRow] = tick(false, t("team_reset"), t("team_reset_explain"));
+    const resetNote = h("div", { class: "hint", style: "margin-top:6px" });
+    let resetManual = false, templateUsed = false;
+    reset.addEventListener("change", () => { resetManual = true; });
+    const teamNow = () => { const lead = chief.value;
+      return [lead, Object.entries(roles).filter(([n, el]) => n !== lead && el.querySelector("input[type=checkbox]").checked).map(([n]) => n)]; };
+    const changedSetup = () => { const [lead, members] = teamNow();
+      return [...(lead ? [lead] : []), ...members].filter((n) => setups[n]).filter((n) => {
+        const old = (cfg.setup || {})[n] || {};
+        return setups[n].lang.value !== (old.lang || "") || setups[n].area.value.trim() !== (old.context || "").trim(); }); };
+    function autoReset() {
+      const changed = changedSetup(), [lead, members] = teamNow();
+      if (!resetManual) reset.checked = changed.length > 0 || templateUsed;
+      const names = (changed.length ? changed : [...(lead ? [lead] : []), ...members]).join(", ") || "-";
+      resetNote.textContent = t("team_reset_who", { names }) + (templateUsed ? " " + t("team_reset_template") : "");
+      resetNote.style.display = reset.checked ? "" : "none";
+    }
     const chiefPart = h("div", {},
       h("div", { class: "sec-title" }, t("team_chief_label")),
       chief, h("div", { class: "hint", style: "margin-top:6px;font-size:12px;color:var(--ink-3)" }, t("team_chief_note")),
@@ -1328,7 +1376,7 @@ async function openTeam() {
       h("div", { class: "sec-title" }, t("team_roles_label")),
       h("p", { class: "explain" }, t("team_roles_explain")), rolesBox, rolesNone,
       h("div", { class: "sec-title" }, t("team_setup_label")),
-      h("p", { class: "explain" }, t("team_setup_explain")), setupBox,
+      h("p", { class: "explain" }, t("team_setup_explain")), teamTpl, setupBox,
       h("div", { class: "sec-title" }, t("team_post_label")),
       radios("post_mode", cfg.post_mode || "ask", [["off", t("team_post_off"), t("team_post_off_explain")],
         ["ask", t("team_post_ask"), t("team_post_ask_explain")], ["auto", t("team_post_auto"), t("team_post_auto_explain")]]),
@@ -1338,10 +1386,25 @@ async function openTeam() {
       h("div", { class: "field-row" }, numField(NUMS[2]), numField(NUMS[3])),
       h("div", { class: "field-row" }, numField(NUMS[4]), h("div")),
       oneVideoRow, showFailedRow,
-      h("div", { class: "box" }, resetRow));
+      h("div", { class: "box" }, resetRow, resetNote));
     const msg = h("div", { class: "msg", role: "status" });
     const save = h("button", { class: "btn btn-act", type: "submit" }, t("settings_save"));
     let form;
+    // Reset doi: moi thiet lap ve mac dinh + bot xoa du lieu Muse cua chi huy va ca doi
+    const fullReset = h("button", { type: "button", class: "btn btn-line", title: t("team_full_reset_hint"), onclick: async () => {
+      const lead = chief.value;
+      const team = [...(lead ? [lead] : []), ...Object.entries(roles)
+        .filter(([n, el]) => n !== lead && el.querySelector("input[type=checkbox]").checked).map(([n]) => n)];
+      const muses = cfg.muse_profiles || [];
+      const targets = muses.length ? team.filter((n) => muses.includes(n)) : team;
+      const names = targets.join(", ") || t("team_full_reset_none");
+      if (!confirm(t("team_full_reset_confirm", { names }))) return;
+      fullReset.disabled = save.disabled = true;
+      try {
+        await api("POST", "/settings/muse-team/reset", { profiles: targets });
+        close(); toast(t("team_full_reset_done", { names }));
+      } catch (err) { msg.className = "msg err"; msg.textContent = err.message; fullReset.disabled = save.disabled = false; }
+    } }, "↺ " + t("team_full_reset"));
     const picked = (name) => { const r = form.querySelector("input[name=" + name + "]:checked"); return r ? r.value : ""; };
     form = h("form", {
       onsubmit: async (e) => {
@@ -1367,13 +1430,14 @@ async function openTeam() {
         const long = Object.entries(setup).find(([, v]) => v.context.length > MAX_CONTEXT);
         if (long) { msg.className = "msg err"; msg.textContent = t("team_setup_too_long", { name: long[0], max: MAX_CONTEXT }); return; }
         const wipe = mode === "chief" && reset.checked;
+        const targets = changedSetup();
         if (wipe) {
-          const team = [chief.value, ...others.filter(([, el]) => inTeam(el)).map(([n]) => n)];
-          if (!confirm(t("team_reset_confirm", { names: team.join(", ") }))) return;
+          const team = targets.length ? targets : [chief.value, ...others.filter(([, el]) => inTeam(el)).map(([n]) => n)];
+          if (!confirm(t("team_reset_confirm", { names: team.join(", ") }) + (templateUsed ? "\n\n" + t("team_reset_template") : ""))) return;
         }
         const body = { mode, chief: chief.value || null, approval: picked("approval") || "manual", excluded,
           roles: Object.fromEntries(Object.entries(roles).map(([n, el]) => [n, el.querySelector("input:not([type])").value])),
-          ...values, one_video: oneVideo.checked, show_failed_media: showFailed.checked, reset_data: wipe, setup, task_lang: taskLang.value,
+          ...values, one_video: oneVideo.checked, show_failed_media: showFailed.checked, reset_data: wipe, reset_targets: wipe ? targets : null, reset_team_data: wipe && templateUsed, setup, task_lang: taskLang.value,
           post_mode: picked("post_mode") || "ask", post_profile: postProfile.value };
         save.disabled = true;
         try { await api("PUT", "/settings/muse-team", body); close(); toast(t(wipe ? "team_saved_reset" : "team_saved")); }
@@ -1385,7 +1449,8 @@ async function openTeam() {
         radios("mode", cfg.mode, [["solo", t("team_mode_solo"), t("team_mode_solo_explain")],
           ["chief", t("team_mode_chief"), t("team_mode_chief_explain")]]),
         chiefPart, msg),
-      h("div", { class: "modal-foot" }, h("button", { type: "button", class: "btn btn-line", onclick: close }, t("cancel")), save));
+      h("div", { class: "modal-foot" }, fullReset, h("span", { style: "flex:1" }),
+        h("button", { type: "button", class: "btn btn-line", onclick: close }, t("cancel")), save));
     const sync = () => {
       chiefPart.style.display = picked("mode") === "chief" ? "" : "none";
       const ch = mapped[postProfile.value] || {};
@@ -1399,6 +1464,7 @@ async function openTeam() {
         .filter(([n, el]) => n !== lead && setups[n] && el.querySelector("input[type=checkbox]").checked).map(([n]) => n)];
       members.forEach((n) => { setups[n].head.textContent = n === lead ? t("team_setup_chief", { name: n }) : n; });
       setupBox.replaceChildren(...members.map((n) => setups[n].box));
+      autoReset();
     };
     form.addEventListener("change", sync);
     sync();

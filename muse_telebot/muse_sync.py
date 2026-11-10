@@ -18,7 +18,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "foxprofile"))
-from foxprofile_client import FoxError, FoxProfileBrowser, same_url  # noqa: E402
+from foxprofile_client import STARTUP_WAIT_SECONDS, FoxError, FoxProfileBrowser, same_url  # noqa: E402
 
 MUSE_URL = "https://muse.ai/"
 # O chat cua Muse; nhan theo ngon ngu giao dien (tieng Anh / tieng Viet), du phong: textarea dau tien cua composer.
@@ -108,8 +108,18 @@ MESSAGES_JS = r"""() => {
  // Luoi nhieu anh vua tai lai trang: o chua nap chua co <img> nen tiles() khong dem, luoi 4 anh ma moi 1 o nap xong
  // trong nhu tin 1 anh (2026-11-06: 1 profile chi chuyen 1/4 anh). Props van liet ke du: o nao chua thay la dang nap.
  const unseen = p => ['image', 'video'].includes(kindOf(p)) ? Math.max(0, entries(p).length - tiles(p).length) : 0;
+ // Tin chua render (ao hoa ngoai vung nhin: chi co khung rong div.opacity-0 + dong doc "Assistant message: ..."):
+ // khong doc duoc gi -> unrendered; bot cuon toi tin do (scroll_to) neu chua chuyen. Kiem tra 2026-11-07.
+ const ghost = item => !!(item.firstElementChild && item.firstElementChild.classList.contains('opacity-0'));
  const waiting = items.flatMap(i => presentations(i).filter(p => !['audio', 'file'].includes(kindOf(p))).flatMap(p =>
    unseen(p) ? [p] : tiles(p).filter(t => !mediaOf(p, t) && !t.querySelector('a[href]') && !gone(t))))[0];
+ // Widget trong props React cua 1 khung the (Camoufox: qua wrappedJSObject), chep ra object thuong.
+ const widgetOf = el => { try { const w = el.wrappedJSObject || el;
+     let f = w[Object.keys(w).find(k => k.startsWith('__reactFiber'))];
+     for (let i = 0; f && i < 30; i++, f = f.return) {
+       const p = f.memoizedProps; if (p && p.widget) return JSON.parse(JSON.stringify(p.widget)); }
+   } catch (e) {}
+   return null; };
  // Khong co gi cho nap: ve cuoi chat. Tin ngoai vung nhin bi ao hoa (rong), tin moi phai nam trong vung nhin.
  if (waiting) waiting.scrollIntoView({block: 'center'});
  else if (items.length) items[items.length - 1].scrollIntoView({block: 'end'});
@@ -123,6 +133,8 @@ MESSAGES_JS = r"""() => {
     let text = item.innerText;
     for (const a of alerts) text = text.replace(a.innerText, '');
     out.text = text.trim().slice(0, 2000);
+    // Anh / video dinh kem: <img alt="ten file"> (video cung la img poster). Tin chi co chu: 0. Kiem tra 2026-11-09.
+    out.attached = item.querySelectorAll('img[alt], video').length;
     return out;
   }
   const body = item.querySelector('[data-hatch-assistant-message-body]');
@@ -157,6 +169,23 @@ MESSAGES_JS = r"""() => {
       : ['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext) ? 'image' : ['mp3', 'wav', 'm4a', 'ogg'].includes(ext) ? 'audio' : '';
     if (kind) linked.push({kind, src: a.href, title: name || file, name: file});
   }
+  // The Space (trang artifact Muse vua tao / cap nhat, VD "Tong hop video"): widget kind space_build_completed, KHONG
+  // co <a href> (bam the de mo), link nam trong props: data.spaceBuildCompleted.space_path = /space/<slug>. Tin chi
+  // co the nay thi truoc day doc ra rong va bi bo qua (2026-11-07: Muse1 gui link trang, Telegram khong nhan duoc).
+  for (const card of item.querySelectorAll('[data-pel-impression$="_card_impression"]')) {
+    if (card.closest('[data-testid^="hatch-chat-attachment-presentation-"]')) continue;
+    const wd = widgetOf(card);
+    const info = wd && wd.data ? Object.values(wd.data).find(v => v && typeof v === 'object') || {} : {};
+    const path = info.space_path || info.url || info.path || '';
+    if (!path || !/^(\/|https?:)/.test(path)) continue;
+    const url = new URL(path, location.origin).href;
+    if (out.html.includes(esc(url))) continue;
+    const name = (wd.title || info.display_name || info.name || '').trim();
+    out.text = (out.text ? out.text + '\n' : '') + (name ? name + ': ' : '') + url;
+    out.html = (out.html ? out.html + '\n\n' : '') + '🔗 ' + (name ? '<b>' + esc(name) + '</b>\n' : '')
+      + '<a href="' + esc(url).replace(/"/g, '&quot;') + '">' + esc(url) + '</a>';
+  }
+  out.unrendered = !out.text && !body && ghost(item);
   // Video nhung ngay trong than tin (khung bam de xem, data-hatch-video-src = link kho cong khai muse.ai/files/...),
   // khong phai khung dinh kem cuoi tin: VD "Rong Lua — ..." + video ngay duoi. Chu thich = dong chu dam ngay truoc.
   // Kiem tra 2026-11-05.
@@ -208,7 +237,13 @@ MESSAGES_JS = r"""() => {
       kind: e.missing ? 'missing' : kindOf(p), lost: !!e.missing, src: '', pending: true,
       title: e.label || (e.path || '').split('/').pop()})));
   };
-  out.media = presentations(item).flatMap(p => kindOf(p) === 'file' ? [fileOf(p)] : withUnseen(p)).concat(linked);
+  // Audio: pos = thu tu khung trong tin (fetch_audio bam Play dung khung), ten file / mime tu props data.audio
+  const audioOf = (p, pos) => { const f = (presOf(p).data || {}).audio || {};
+    return withUnseen(p).map(m => Object.assign(m, {pos, name: (f.path || '').split('/').pop(), mime: f.mime || '',
+                                                     size: f.byteLen || 0, path: f.path || '',
+                                                     preview: (f.variants || {}).original || ''})); };
+  out.media = presentations(item).flatMap((p, pos) => kindOf(p) === 'file' ? [fileOf(p)]
+    : kindOf(p) === 'audio' ? audioOf(p, pos) : withUnseen(p)).concat(linked);
   return out;
  });
 }"""
@@ -244,6 +279,73 @@ FILE_JS = """async () => { const id = %s, name = %s, sleep = ms => new Promise(r
   } finally {
     const x = document.querySelector('[data-testid="hatch-file-editor-close"]'); if (x) x.click(); }
   return text; }"""
+# Audio Muse tao (VD giong doc mau): khung chi co nut Play, khong <audio src>; link goc (data.audio.variants.original,
+# *.metaaivm.com) fetch trong trang bi NetworkError. Muse nap file khi bam Play: trinh phat chung (component
+# HatchGlobalAudioElement, 1 <audio> cho moi khung) goi ham nap async (path, previewUrl) -> {src: blob:...} (rawFetch qua
+# gateway sandbox), ham nay nam trong memo cache React cua component. Kiem tra 2026-11-09.
+# Cach lay: chen hook vao main world (script mang nonce cua trang; evaluate chay o isolated world nen khong goi duoc ham /
+# va prototype cua trang):
+#  1. __m2tLoad3(path, previewUrl): goi thang ham nap cua trinh phat -- khong can khung render (tin cu ngoai vung nhin
+#     sau khi tai lai trang la khung rong, cua so trinh duyet o nen thi trang khong ve lai nen khong render duoc).
+#     Chi dung duoc khi <audio> chung da co (da phat 1 audio tu luc tai trang).
+#  2. Du phong: bam Play; lan play() ngay sau do bi tat tieng, dung ngay, doc blob dang phat (el.src: luc play()
+#     currentSrc con la file phat truoc).
+# Ket qua (data URL / "error:..." / "noloader") vao window.__m2tAudio3.
+AUDIO_HOOK = r"""(() => { if (window.__m2tAudio3) return; const got = window.__m2tAudio3 = [];
+  const read = url => fetch(url).then(r => r.blob()).then(b => new Promise((ok, err) => { const f = new FileReader();
+    f.onload = () => ok(String(f.result)); f.onerror = () => err(f.error); f.readAsDataURL(b); }));
+  window.__m2tLoad3 = (path, preview) => { const i = got.push('') - 1, a = document.querySelector('audio');
+    let f = a && a[Object.keys(a).find(k => k.startsWith('__reactFiber'))], load = null;
+    for (let j = 0; f && j < 5 && !load; j++, f = f.return) {
+      const mc = f.updateQueue && f.updateQueue.memoCache;
+      for (const d of (mc && mc.data) || []) for (const x of (Array.isArray(d) ? d : []))
+        if (typeof x === 'function' && /\{path:\w+,previewUrl:\w+\}/.test(String(x))) load = x; }
+    if (!load) { got[i] = 'noloader'; return; }
+    load(path, preview).then(r => { if (!r || !r.src) throw 'Muse khong nap duoc audio'; return read(r.src); })
+      .then(d => { got[i] = d; }, e => { got[i] = 'error:' + e; }); };
+  const play = HTMLMediaElement.prototype.play;
+  HTMLMediaElement.prototype.play = function () {
+    if (!(window.__m2tGrab3 > Date.now())) return play.apply(this, arguments);
+    window.__m2tGrab3 = 0;
+    const el = this, prev = el.muted, i = got.push('') - 1;
+    el.muted = true;
+    const r = play.apply(this, arguments);
+    Promise.resolve(r).catch(() => {}).then(() => { el.pause(); try { el.currentTime = 0; } catch (e) {} el.muted = prev; });
+    const url = el.src || el.currentSrc;
+    (url ? read(url) : Promise.reject('audio chua co src')).then(d => { got[i] = d; }, e => { got[i] = 'error:' + e; });
+    return r; };
+})();"""
+AUDIO_JS = """async () => { const id = %s, pos = %s, path = %s, preview = %s, hook = %s;
+  const sleep = ms => new Promise(r => setTimeout(r, ms)), W = window.wrappedJSObject || window;
+  const run = code => { const s = document.createElement('script');
+    s.nonce = (document.querySelector('script[nonce]') || {}).nonce || ''; s.textContent = code;
+    document.head.appendChild(s); s.remove(); };
+  const wait = async (n, what) => { for (let i = 0; i < 60; i++) { await sleep(500);
+      const d = W.__m2tAudio3.length > n ? W.__m2tAudio3[n] : '';
+      if (d) { if (d.startsWith('error:')) throw new Error(d.slice(6)); return d; } }
+    throw new Error(what + ' nhung Muse khong nap audio sau 30s'); };
+  if (!W.__m2tAudio3) run(hook);
+  if (!W.__m2tAudio3) throw new Error('khong chen duoc hook audio vao trang');
+  if (path) {
+    const n = W.__m2tAudio3.length;
+    run('window.__m2tLoad3(' + JSON.stringify(path) + ', ' + JSON.stringify(preview) + ')');
+    const d = await wait(n, 'goi ham nap');
+    if (d !== 'noloader') return d; }
+  let p;
+  for (let i = 0; i < 20 && !p; i++) {
+    const e = [...document.querySelectorAll('[data-message-item]')].find(e => e.getAttribute('data-message-id') === id);
+    if (!e) throw new Error('khong thay tin ' + id);
+    e.scrollIntoView({block: 'center'});
+    const ps = e.querySelectorAll('[data-testid^="hatch-chat-attachment-presentation-"]');
+    p = ps[pos] && ps[pos].getAttribute('data-testid').endsWith('-audio') ? ps[pos] : null;
+    if (!p) await sleep(500); }
+  if (!p) throw new Error('khung audio khong hien');
+  const b = p.querySelector('button[aria-label]');
+  if (!b) throw new Error('khung audio khong co nut Play');
+  const n = W.__m2tAudio3.length;
+  W.__m2tGrab3 = Date.now() + 20000;
+  b.click();
+  try { return await wait(n, 'bam Play'); } finally { W.__m2tGrab3 = 0; } }"""
 
 logger = logging.getLogger("muse.sync")
 _profile_locks = {}
@@ -298,6 +400,16 @@ def messages(fox):
         return fox.evaluate(MESSAGES_JS) or []
 
 
+SCROLL_TO_JS = """() => { const e = [...document.querySelectorAll('[data-message-item]')]
+  .find(e => e.getAttribute('data-message-id') === %s); if (e) e.scrollIntoView({block: 'center'}); return !!e; }"""
+
+
+def scroll_to(fox, message_id):
+    """Cuon toi 1 tin (tin ao hoa ngoai vung nhin chi render khi nam trong vung nhin)."""
+    with lock_for(fox.profile):
+        return bool(fox.evaluate(SCROLL_TO_JS % json.dumps(message_id)))
+
+
 def reload_chat(fox, url):
     """Tai lai trang chat: anh/video Muse vua tao doi khi ket o khung "dang tai" hang phut, tai lai trang la nap ngay."""
     with lock_for(fox.profile):
@@ -310,6 +422,20 @@ def fetch_media(fox, src):
     with lock_for(fox.profile):
         head, _, data = fox.evaluate(FETCH_JS % json.dumps(src)).partition(",")
     return base64.b64decode(data), head.removeprefix("data:").split(";")[0]
+
+
+def fetch_audio(fox, message_id, pos, size=0, path="", preview=""):
+    """Audio Muse dinh kem (khung thu pos trong tin message_id; path / preview: data.audio.path / variants.original
+    trong props): goi ham nap cua trinh phat Muse, khong duoc thi bam Play (tat tieng, dung ngay) roi doc file (xem
+    AUDIO_JS). size: so byte Muse ghi trong props (0 = khong kiem tra). Tra ve (bytes, mime)."""
+    js = AUDIO_JS % (json.dumps(message_id), int(pos), json.dumps(path or ""), json.dumps(preview or ""),
+                     json.dumps(AUDIO_HOOK))
+    with lock_for(fox.profile):
+        head, _, data = fox.evaluate(js).partition(",")
+    data = base64.b64decode(data)
+    if size and len(data) != size:  # lay nham file dang phat truoc do
+        raise ValueError(f"audio tai ve {len(data)} byte, Muse ghi {size} byte")
+    return data, head.removeprefix("data:").split(";")[0]
 
 
 def fetch_file(fox, message_id, name):
@@ -427,6 +553,26 @@ def delivered(fox, before):
         time.sleep(1)
 
 
+MEDIA_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".mp4", ".mov", ".webm", ".m4v", ".mkv", ".avi"}
+ATTACH_CONFIRM_SECONDS = 10  # tin co anh / video vua hien: cho khung dinh kem hien trong bong tin
+
+
+def has_media(files):
+    """Co anh / video (Muse hien trong bong tin nguoi dung dang <img alt>) -> kiem tra duoc tin len Muse co kem file."""
+    return any(Path(f).suffix.lower() in MEDIA_EXT for f in files or ())
+
+
+def _attached(fox, before, seconds=ATTACH_CONFIRM_SECONDS):
+    """Tin nguoi dung moi (khong co trong before) co kem anh / video chua."""
+    deadline = time.time() + seconds
+    while True:
+        if any(m["role"] == "user" and m["id"] not in before and m.get("attached") for m in messages(fox)):
+            return True
+        if time.time() >= deadline:
+            return False
+        time.sleep(1)
+
+
 def try_send(chat, text, files, refresh, seen=None, base=None):
     """Mot lan thu gui text + files (duong dan, phai nam trong FOXPROFILE_UPLOAD_DIRS) vao chat. (da_gui, thong_bao).
     seen (set): dien id cac tin dang co truoc khi gui, de biet tin nao cua Muse la tra loi moi.
@@ -444,10 +590,12 @@ def try_send(chat, text, files, refresh, seen=None, base=None):
         fox.tab = index
     current = messages(fox)
     before = {m["id"] for m in current}
+    media = has_media(files)
     if base is not None:
         if not base:
             base.update(before)
         elif text and any(m["role"] == "user" and m["id"] not in base and not m.get("failed")
+                          and (m.get("attached") or not media)  # lan truoc len Muse chi co chu: chua tinh la da gui
                           and _flat(text)[:60] in _flat(m.get("text")) for m in current):
             if seen is not None:
                 seen.clear()
@@ -466,6 +614,8 @@ def try_send(chat, text, files, refresh, seen=None, base=None):
         time.sleep(2)
         if not delivered(fox, before):
             return False, f"{key}: Muse bao \"Delivery not confirmed\", chua gui duoc."
+        if media and not _attached(fox, before):
+            return False, f"{key}: khong thay tin kem anh/video moi tren Muse, chua gui duoc."
         return True, f"Da gui vao {key}."
     # O chat duoc xoa chua du: trang treo (2026-10-29 23:58) van xoa o chat ma tin khong len muse. Phai thay tin
     # nguoi dung moi trong chat.
@@ -476,6 +626,9 @@ def try_send(chat, text, files, refresh, seen=None, base=None):
         if cleared and any(m["role"] == "user" and m["id"] not in before for m in messages(fox)):
             if not delivered(fox, before):
                 return False, f"{key}: Muse bao \"Delivery not confirmed\", chua gui duoc."
+            # 2026-11-09 Muse8: tin video + chu hien roi mat, ban gui lai chi con chu -> Muse "chua thay video"
+            if media and not _attached(fox, before):
+                return False, f"{key}: tin len Muse nhung khong kem anh/video, chua gui duoc."
             now_url = fox.url()
             if not same_url(now_url, chat["url"]):
                 logger.warning(f"{key}: gui xong tab chat chuyen sang {now_url}")
@@ -509,7 +662,13 @@ def send(chat, text="", files=(), seen=None, base=None):
             except UploadError as e:
                 logger.error(f"send {chat['key']}: {e}")
                 return None, f"{chat['key']}: khong dua duoc file vao Muse -- {e}"
-            except Exception as e:  # FoxError, mang...
+            except FoxError as e:
+                if e.is_starting:  # da cho STARTUP_WAIT_SECONDS: de trinh duyet khoi dong xong, gui lai sau
+                    logger.warning(f"send {chat['key']}: trinh duyet van dang khoi dong, khong khoi dong lai")
+                    return False, (f"{chat['key']}: trinh duyet dang khoi dong (cho {STARTUP_WAIT_SECONDS}s chua "
+                                   f"xong), gui lai sau.")
+                ok, msg = False, f"{chat['key']}: loi FoxError: {e}"
+            except Exception as e:  # mang...
                 ok, msg = False, f"{chat['key']}: loi {type(e).__name__}: {e}"
             if ok:
                 return True, (msg if attempt == 0 else f"{msg} (sau {attempt} lan refresh)" if attempt < SEND_ATTEMPTS

@@ -55,11 +55,25 @@ class MuseTeamResponse(BaseModel):
     one_video: bool = Field(description="Video tasks: one video at a time, next only after it passes")
     show_failed_media: bool = Field(description="Also post images / videos that have not passed to Telegram")
     reset_id: str = Field(description="Id of the last Muse data wipe asked for (the bot runs each once)")
+    reset_full: bool = Field(
+        default=False, description="The last wipe is a full team reset (tasks, samples, character sets too)"
+    )
+    reset_targets: list[str] = Field(default_factory=list, description="Muses a full reset wipes")
+    reset_pending: bool = Field(default=False, description="The bot has not started the last wipe yet")
+    detached: dict[str, dict] = Field(
+        default_factory=dict,
+        description='Members taken out of the team: profile -> {"id", "wipe"} (the bot acts once per id)',
+    )
+    muse_profiles: list[str] = Field(
+        default_factory=list, description="Profiles the bot runs as a Muse (they have a Telegram topic)"
+    )
     bot_installed: bool
     profiles: list[str] = Field(default_factory=list, description="Profiles that can join the team")
     langs: dict[str, str] = Field(default_factory=dict, description="Language code -> name")
     templates: list[dict[str, str]] = Field(
-        default_factory=list, description="Ready-made contexts: id, label, text"
+        default_factory=list,
+        description="Ready-made team contexts: id, label, chief (context for the chief), member "
+        "(context for every team member), member_role (role filled into empty member roles)",
     )
 
 
@@ -89,6 +103,34 @@ class MuseTeamUpdate(BaseModel):
         default=False,
         description="Chief mode: wipe the Muse data (chats, files, artifacts) of the chief and every "
         "team member once, with their Telegram topics. Cannot be undone.",
+    )
+    reset_targets: list[str] | None = Field(
+        default=None,
+        description="With reset_data: wipe only these Muses (e.g. those whose context changed); "
+        "empty = the chief and the whole team",
+    )
+    reset_team_data: bool = Field(
+        default=False,
+        description="With reset_data: also drop the team's tasks, sample videos and scripts and archive "
+        "the locked character sets (use when switching to another template)",
+    )
+
+
+class MuseTeamReset(BaseModel):
+    profiles: list[str] = Field(
+        default_factory=list,
+        description="Muses whose data the bot wipes (chief + team members). Every team setting "
+        "goes back to its default and the bot clears the team's tasks, sample videos, scripts "
+        "and locked character sets. Cannot be undone.",
+    )
+
+
+class MuseTeamDetach(BaseModel):
+    profile: str = Field(description="Team member (not the chief) to take out of the team")
+    wipe: bool = Field(
+        default=False,
+        description="Also wipe its Muse data (chats, files, artifacts, topic messages) so nothing of "
+        "the team stays in its memory. Cannot be undone. False: the bot tells the Muse it left the team.",
     )
 
 

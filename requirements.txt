@@ -3,3 +3,7 @@
 pyTelegramBotAPI
 requests
 python-dotenv
+# video mau (muse_telebot/video_sample.py): tai video tu link, cat khung hinh thanh anh ghep
+yt-dlp
+Pillow
+imageio-ffmpeg

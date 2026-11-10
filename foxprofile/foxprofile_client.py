@@ -35,6 +35,17 @@ class FoxError(Exception):
     def is_timeout(self):
         return "timeout" in self.detail.lower()
 
+    @property
+    def is_starting(self):
+        """Trinh duyet cua profile van dang khoi dong (FoxProfile tra 503 "Browser is still starting")."""
+        return self.status == 503 and "still starting" in self.detail.lower()
+
+
+# Profile dang / vua khoi dong: cho toi da chung nay giay cho trinh duyet san sang. Het gio thi bao loi (is_starting),
+# KHONG dong / mo lai trinh duyet dang khoi dong (2026-11-06: Muse8 mo mat hon 3 phut, bot dong no giua chung roi mo
+# lai, lap mai khong xong).
+STARTUP_WAIT_SECONDS = 60
+
 
 class FoxProfileBrowser:
     def __init__(self, profile, base_url=None, token=None, log=print):
@@ -94,7 +105,7 @@ class FoxProfileBrowser:
     def _status_running(self):
         return bool(self._call("GET", f"/browser/{self.profile}/status", timeout=15).json()["is_running"])
 
-    def launch(self, timeout=90):
+    def launch(self, timeout=STARTUP_WAIT_SECONDS):
         self.log(f"Mo profile FoxProfile '{self.profile}'")
         self._call("POST", f"/browser/{self.profile}/launch", timeout=timeout + 30)
         deadline = time.time() + timeout
@@ -109,9 +120,23 @@ class FoxProfileBrowser:
                     raise
             time.sleep(1)
 
+    def wait_ready(self, timeout=STARTUP_WAIT_SECONDS):
+        """Profile dang chay nhung trinh duyet con dang khoi dong: cho toi da timeout giay. Het gio -> FoxError
+        is_starting (de nguyen trinh duyet cho no khoi dong xong)."""
+        deadline = time.time() + timeout
+        while True:
+            try:
+                self.tabs()
+                return
+            except FoxError as e:
+                if not e.is_starting or time.time() > deadline:
+                    raise
+            time.sleep(2)
+
     def ensure(self):
-        """Mo profile neu chua chay. Tra ve True neu chinh lan nay mo no."""
+        """Mo profile neu chua chay (dang khoi dong thi cho san sang). Tra ve True neu chinh lan nay mo no."""
         if self.is_running():
+            self.wait_ready()
             return False
         self.launch()
         return True
@@ -201,6 +226,8 @@ class FoxProfileBrowser:
             self._call("POST", f"/browser/{self.profile}/page/evaluate", timeout=30,
                        json={"script": "() => 1", "tab": "about:__probe__"})
         except FoxError as e:
+            if e.is_starting:  # chua tra loi duoc: khong ket luan "ban cu" (truoc day bot khoi dong lai trinh duyet)
+                raise
             return "No tab with URL" in e.detail
         return False
 

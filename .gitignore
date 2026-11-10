@@ -7,7 +7,7 @@
 foxprofile/data/
 **/profiles.json
 **/settings.json
-Videos/downloads/
+Videos/
 muse_telebot/muse_users.db
 muse_telebot/muse_sync.json
 muse_telebot/muse_telebot_state.json
@@ -17,6 +17,7 @@ muse_telebot/muse_team.json
 *.sqlite3
 *.sqlite-*
 *.log
+*.log.*
 
 # Python environments and generated files
 .venv/
