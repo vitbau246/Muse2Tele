@@ -28,8 +28,36 @@ class UploadDirsUpdate(BaseModel):
     muse_upload_dir: str | None = Field(default=None, description="Full folder path; empty = bot default")
 
 
+class VideoSaveResponse(BaseModel):
+    env_file: str = Field(description=".env the setting is saved to")
+    enabled: bool = Field(description="MUSE_SAVE_VIDEOS: the bot keeps a copy of every video Muse sends")
+    save_dir: str = Field(description="MUSE_SAVE_VIDEO_DIR: base folder; videos go to <folder>/<Muse profile>/")
+    default_dir: str = Field(description="Folder used when MUSE_SAVE_VIDEO_DIR is not set")
+    custom: bool = Field(description="False = not set, default_dir applies")
+
+
+class VideoSaveUpdate(BaseModel):
+    enabled: bool = Field(description="Save every video Muse sends")
+    save_dir: str | None = Field(default=None, description="Full folder path; empty = default_dir")
+
+
 class MuseTeamResponse(BaseModel):
     file: str = Field(description="muse_team.json the settings are saved to")
+    id: str = Field(default="default", description="Team id (each team works in its own Telegram group)")
+    name: str = Field(default="", description="Team name")
+    is_default: bool = Field(default=True, description="Default team: gets every profile no other team lists")
+    team_profiles: list[str] | None = Field(
+        default=None, description="Profiles in this team's group; null on the default team (= the rest)"
+    )
+    group_profiles: list[str] = Field(
+        default_factory=list, description="Profiles in this team's group right now (resolved team_profiles)"
+    )
+    group: int | None = Field(default=None, description="Telegram group the bot linked to this team")
+    group_title: str = Field(default="", description="Title of that group")
+    teams: list[dict] = Field(default_factory=list, description="Every team, short (id, name, default, group...)")
+    assigned: dict[str, str] = Field(default_factory=dict, description="Profile -> team id that lists it")
+    skill: str = Field(default="", description="Skill pack the team was set up from")
+    features: list[str] = Field(default_factory=list, description='Bot workflows the team uses ("video")')
     mode: str = Field(
         description='"solo": each Muse works alone; "chief": one Muse leads the others'
     )
@@ -70,14 +98,22 @@ class MuseTeamResponse(BaseModel):
     bot_installed: bool
     profiles: list[str] = Field(default_factory=list, description="Profiles that can join the team")
     langs: dict[str, str] = Field(default_factory=dict, description="Language code -> name")
-    templates: list[dict[str, str]] = Field(
+    templates: list[dict] = Field(
         default_factory=list,
-        description="Ready-made team contexts: id, label, chief (context for the chief), member "
-        "(context for every team member), member_role (role filled into empty member roles)",
+        description="Skill packs: id, label, description, features, settings (video settings), chief "
+        "(context for the chief), member (context for every member), member_role, license, source",
     )
 
 
 class MuseTeamUpdate(BaseModel):
+    name: str | None = Field(default=None, description="Team name; null = keep")
+    team_profiles: list[str] | None = Field(
+        default=None, description="Profiles in the team's group (not the default team); null = keep"
+    )
+    skill: str | None = Field(default=None, description='Skill pack id ("" = none); null = keep')
+    features: list[str] | None = Field(
+        default=None, description='Bot workflows ("video"); null = keep, or those of the new skill pack'
+    )
     mode: str = Field(description='"solo" or "chief"')
     chief: str | None = Field(default=None, description="Profile name; required in chief mode")
     approval: str = Field(default="manual", description='"manual" or "auto"')
@@ -125,6 +161,11 @@ class MuseTeamReset(BaseModel):
     )
 
 
+class MuseTeamCreate(BaseModel):
+    name: str = Field(description="Team name")
+    team_profiles: list[str] = Field(default_factory=list, description="Profiles in the team's group")
+
+
 class MuseTeamDetach(BaseModel):
     profile: str = Field(description="Team member (not the chief) to take out of the team")
     wipe: bool = Field(
@@ -142,7 +183,10 @@ class PostMapPage(BaseModel):
 class PostMapEntry(BaseModel):
     fanpages: list[PostMapPage] = Field(default_factory=list, description="Pages this profile posts to")
     tiktok: str = Field(default="", description="TikTok username this profile posts with (no @)")
-    max_per_day: int = Field(default=0, description="Posts per Page / TikTok account a day; 0 = no limit")
+    youtube: str = Field(default="", description="YouTube channel handle this profile posts to (no @)")
+    max_per_day: int = Field(
+        default=0, description="Posts per Page / TikTok account / YouTube channel a day; 0 = no limit"
+    )
     hours: str = Field(default="", description='Posting hours like "11-13, 19-23"; empty = any time')
     caption_lang: str = Field(default="", description="Language code of the caption the team bot asks for")
 
@@ -151,8 +195,13 @@ class PostMapRow(BaseModel):
     name: str
     auto_post_fanpage: bool
     auto_post_tiktok: bool
+    auto_post_youtube: bool = False
     known_pages: list[PostMapPage] = Field(
         default_factory=list, description="Pages fanpage_post.py last found for this profile"
+    )
+    known_tiktok: str = Field(default="", description="TikTok account last seen logged in (account check)")
+    known_youtube: list[dict] = Field(
+        default_factory=list, description="YouTube channels ({name, handle}) the logged-in Google account manages"
     )
     check: dict | None = Field(
         default=None, description="Last account check (check_accounts.py): running, at, fanpage, tiktok"
@@ -162,7 +211,9 @@ class PostMapRow(BaseModel):
 class PostMapResponse(BaseModel):
     file: str = Field(description="post_map.json the map is saved to")
     installed: bool = Field(description="social_post folder found next to FoxProfile")
-    profiles: dict[str, PostMapEntry] = Field(description="Profile -> its Pages and TikTok account")
+    profiles: dict[str, PostMapEntry] = Field(
+        description="Profile -> its Pages, TikTok account and YouTube channel"
+    )
     rows: list[PostMapRow] = Field(default_factory=list, description="Every profile, for the table")
     langs: dict[str, str] = Field(default_factory=dict, description="Language code -> name")
 
@@ -170,5 +221,6 @@ class PostMapResponse(BaseModel):
 class PostMapUpdate(BaseModel):
     profiles: dict[str, dict] = Field(
         description='Profile -> {"fanpages": [IDs] or "id1, id2", "tiktok": "handle or profile link", '
-        '"max_per_day": 0-100, "hours": "11-13, 19-23", "caption_lang": code}; profiles left out are removed'
+        '"youtube": "channel handle or link", "max_per_day": 0-100, "hours": "11-13, 19-23", '
+        '"caption_lang": code}; profiles left out are removed'
     )

@@ -1,11 +1,11 @@
-"""Choose FOXPROFILE_UPLOAD_DIRS and MUSE_UPLOAD_DIR (saved to Muse2Tele's .env)."""
+"""Choose FOXPROFILE_UPLOAD_DIRS, MUSE_UPLOAD_DIR and the Muse video auto-save (saved to Muse2Tele's .env)."""
 
 import pathlib
 from collections.abc import Callable
 
 import flet as ft
 
-from ...core import upload_dirs
+from ...core import upload_dirs, video_save
 from ...core.strings import get_string
 from ..theme.colors import COLORS, FONT_BOLD, FONT_DATA, FONT_SEMIBOLD
 from ..theme.styles import ACCENT_STYLE, DLG_FIELD_KWARGS, OUTLINE_STYLE
@@ -31,6 +31,16 @@ def open_upload_dirs_dialog(
         **DLG_FIELD_KWARGS,
     )
     muse_warn = ft.Text(get_string("muse_dir_outside"), size=12, color=COLORS["warning"])
+
+    saving = video_save.current()
+    save_on = ft.Checkbox(label=get_string("video_save_on"), value=saving.enabled)
+    save_field = ft.TextField(
+        value=saving.save_dir if saving.custom else "",
+        hint_text=saving.default_dir,
+        text_style=_DATA,
+        expand=True,
+        **DLG_FIELD_KWARGS,
+    )
 
     def dir_values() -> list[str]:
         return [
@@ -112,11 +122,20 @@ def open_upload_dirs_dialog(
 
     muse_field.on_change = sync
 
+    async def on_choose_save(_: ft.ControlEvent) -> None:
+        await pick_into(save_field)
+
+    def on_save_default(_: ft.ControlEvent) -> None:
+        save_field.value = ""
+        page.update()
+
     def on_save(_: ft.ControlEvent) -> None:
         error.visible = False
         try:
             upload_dirs.save(dir_values(), muse_field.value)
-        except upload_dirs.UploadDirsError as e:
+            if cfg.bot_installed:
+                video_save.save(bool(save_on.value), save_field.value)
+        except (upload_dirs.UploadDirsError, video_save.VideoSaveError) as e:
             error.value = str(e)
             error.visible = True
             page.update()
@@ -177,6 +196,35 @@ def open_upload_dirs_dialog(
         muse_warn,
     )
     muse_section.visible = cfg.bot_installed
+    save_section = section(
+        get_string("video_save_label"),
+        get_string(
+            "video_save_explain",
+            example=str(pathlib.PurePath(saving.save_dir or saving.default_dir) / "Muse2"),
+        ),
+        save_on,
+        ft.Row(
+            spacing=6,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            controls=[
+                save_field,
+                ft.OutlinedButton(
+                    get_string("choose_folder"),
+                    icon=ft.Icons.FOLDER_OPEN,
+                    height=38,
+                    style=OUTLINE_STYLE,
+                    on_click=on_choose_save,
+                ),
+                ft.TextButton(get_string("use_default"), on_click=on_save_default),
+            ],
+        ),
+        ft.Text(
+            get_string("video_save_default", path=saving.default_dir),
+            size=12,
+            color=COLORS["text_dim"],
+        ),
+    )
+    save_section.visible = cfg.bot_installed
 
     dlg = ft.AlertDialog(
         modal=True,
@@ -210,7 +258,7 @@ def open_upload_dirs_dialog(
                 spacing=4,
                 scroll=ft.ScrollMode.AUTO,
                 horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
-                controls=[upload_section, muse_section, error],
+                controls=[upload_section, muse_section, save_section, error],
             ),
         ),
         actions=[

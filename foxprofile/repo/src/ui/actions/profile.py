@@ -64,11 +64,12 @@ def edit_profile(
         _engine: str,
         fanpage: bool,
         tiktok: bool,
+        youtube: bool,
     ) -> str | None:
         if new_name != original and bl.is_running(original):
             return get_string("stop_before_rename")
         if pm.update_profile(original, new_name, new_proxy, new_os, timezone, locale):
-            pm.set_auto_post(new_name, fanpage, tiktok)
+            pm.set_auto_post(new_name, fanpage, tiktok, youtube)
             log(get_string("updated_profile", old=original, new=new_name))
             refresh()
             return None
@@ -93,11 +94,12 @@ def add_profile(
         engine: str,
         fanpage: bool,
         tiktok: bool,
+        youtube: bool,
     ) -> str | None:
         if engine == "chrome" and (reason := chrome_prefetch.unsupported_reason()):
             return get_string("chrome_engine_unsupported", reason=reason)
         if pm.add_profile(name, proxy, os_type, timezone, locale, engine):
-            pm.set_auto_post(name, fanpage, tiktok)
+            pm.set_auto_post(name, fanpage, tiktok, youtube)
             log(get_string("created_profile", name=name))
             if engine == "chrome":
                 chrome_prefetch.start(log)

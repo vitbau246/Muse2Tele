@@ -57,6 +57,8 @@ CONTENTEDITABLE = "[contenteditable='true'] >> visible=true"
 COMMENT_BOX_SEL = r"role=textbox[name=/Bình luận|Viết bình luận|Comment|Write a comment/i] >> visible=true >> nth=-1"
 UPLOAD_FAIL_RE = r"Tải lên không thành công|Không thể tải lên|Tải lên thất bại|Upload failed|couldn.?t upload|failed to upload"
 INNER_TRIES = 3        # so lan tu lam lai TOAN BO buoc soan bai (load lai composer) truoc khi tinh la 1 lan loi
+FINAL_BUTTONS = ("Đăng", "Chia sẻ", "Đăng ngay")  # nut cuoi (bai thuong / thuoc phim)
+MAX_NEXT_CLICKS = 4
 SLOW_CLICK_MS = 45000  # click/go o composer (< 60s: FoxProfile cat moi lan goi REST o 60s)
 DATE_INPUT = "input:not([type]):not([aria-label]) >> visible=true"
 
@@ -116,7 +118,16 @@ def open_switcher() -> None:
     """Mo bo chon tai san (combobox goc tren trai thanh ben)."""
     for attempt in range(3):
         if not eval_retry(ROW_COUNT_JS):  # lan bam truoc co the da mo san -> bam nua se dong lai
-            fb.click("role=combobox >> nth=0")
+            # Bo chon Trang = combobox o thanh ben trai, tren cung. KHONG lay combobox dau tien trong DOM: tu 11/2026
+            # trang chu co them combobox "Muc tieu quang cao" dung truoc (bam nham -> "Khong mo duoc bo chon Trang").
+            pt = eval_retry("""() => { const c = [...document.querySelectorAll('[role=combobox]')]
+                .map(e => [e, e.getBoundingClientRect()]).filter(([e, r]) => r.width > 0 && r.left < 260 && r.top >= 0)
+                .sort((a, b) => a[1].top - b[1].top)[0];
+                return c ? [c[1].x + c[1].width / 2, c[1].y + c[1].height / 2] : null; }""")
+            if pt:
+                fb.click_at(*pt)
+            else:
+                fb.click("role=combobox >> nth=0")
         if fb.wait_visible(ROWS_FB, 5):
             break
         if attempt == 2:
@@ -139,7 +150,16 @@ def switch_page(name: str) -> None:
         fb.press("Escape")  # dang dung san o Trang nay
         return
     before = asset_id_of(fb.url())
-    fb.click(row)
+    # Bam theo toa do: click theo selector hay het gio (11/2026, lop phu cua bo chon) -> chi dung khi khong tim thay
+    pt = eval_retry("""() => { const name = %s;
+        const row = [...document.querySelectorAll("[role=row]")].find(r => {
+            const h = r.querySelector("%s"); return h && h.innerText.trim() === name; });
+        if (!row) return null; row.scrollIntoView({block: "center"}); const b = row.getBoundingClientRect();
+        return [b.x + Math.min(b.width / 2, 120), b.y + b.height / 2]; }""" % (json.dumps(name), HEADING))
+    if pt:
+        fb.click_at(*pt)
+    else:
+        fb.click(row)
     for _ in range(30):
         if asset_id_of(fb.url()) != before:
             break
@@ -156,16 +176,62 @@ def switch_page(name: str) -> None:
     time.sleep(1.5)
 
 
-def list_pages() -> list[dict]:
-    """[{name, asset_id}]: mo bo chon Trang, bam lan luot tung muc, doc asset_id tu URL."""
+# Business Suite nhung san danh sach Trang trong HTML trang chu (du lieu React, moi Trang 1 object
+# BusinessScopingPageLocalScope: ..."asset_type":"PAGE","asset_id":"<id>","name":"<ten>"). Doc 1 lan ~3s, khong bam gi
+# (11/2026, Muse9: du 9 Trang, khop het voi cach bam tung Trang cu ~2 phut). RegExp dung bang String.fromCharCode(92):
+# FoxProfile evaluate lam hong chuoi "\\" trong regex literal.
+PAGES_HTML_JS = r"""() => {
+  const html = document.documentElement.innerHTML, out = [], seen = new Set(), B = String.fromCharCode(92);
+  const re = new RegExp('"asset_type":"PAGE","asset_id":"([0-9]+)","name":("(?:[^"' + B + B + ']|' + B + B + '.)*")', 'g');
+  for (const m of html.matchAll(re)) {
+    if (seen.has(m[1])) continue;
+    seen.add(m[1]);
+    let name = "";
+    try { name = JSON.parse(m[2]); } catch (e) {}
+    if (name) out.push({name, asset_id: m[1]});
+  }
+  return out;
+}"""
+scan_skipped: list[str] = []  # Trang thay trong bo chon nhung lan quet gan nhat khong doc duoc asset_id
+
+
+def pages_from_html() -> list[dict]:
+    """[{name, asset_id}] doc tu HTML trang Business Suite (khong bam). Rong neu khong doc duoc."""
+    if "business.facebook.com/latest" not in fb.url():
+        fb.navigate(START_URL, wait_until="load")
+    for _ in range(3):
+        try:
+            pages = eval_retry(PAGES_HTML_JS)
+        except FoxError as e:
+            log(f"Khong doc duoc HTML Business Suite: {e}")
+            return []
+        if pages:
+            return pages
+        time.sleep(2)
+    return []
+
+
+def switcher_names() -> list[str]:
     open_switcher()
     names = []
     for t in eval_retry(ROW_NAMES_JS):
         if t and t not in names:
             names.append(t)
     fb.press("Escape")
-    log(f"Thay {len(names)} Trang: {names}")
-    result = []
+    return names
+
+
+def list_pages() -> list[dict]:
+    """[{name, asset_id}]. Cach nhanh: doc danh sach Trang nhung trong HTML Business Suite (ket qua
+    BusinessCometUnifiedSelectorQuery nap san, chinh la du lieu bo chon Trang hien thi, khong phan trang).
+    Khong doc duoc thi moi dung cach cu: mo bo chon, bam tung Trang, doc asset_id tu URL (cham, ~10s/Trang)."""
+    scan_skipped.clear()
+    result = pages_from_html()
+    if result:
+        log(f"Doc tu HTML Business Suite: {len(result)} Trang: {[p['name'] for p in result]}")
+        return result
+    names = switcher_names()
+    log(f"HTML khong co danh sach Trang -> bam tung Trang trong bo chon ({len(names)}): {names}")
     for name in names:
         try:
             switch_page(name)
@@ -173,6 +239,7 @@ def list_pages() -> list[dict]:
             log(f"  {name} -> asset_id={result[-1]['asset_id']}")
         except Exception as e:
             log(f"  Bo qua '{name}': {e}")
+            scan_skipped.append(name)
     return result
 
 
@@ -190,7 +257,8 @@ def wait_upload_done(timeout_s: float) -> None:
             if fb.evaluate(script):
                 return
         except FoxError as e:
-            if e.status not in (400, 422):
+            # 504: trinh duyet ban day file len (video vai chuc MB), lenh nao cung het gio -> cho tiep
+            if e.status not in (400, 422, 504):
                 raise
         time.sleep(3)
     raise TimeoutError(f"Tai len chua xong sau {timeout_s:g}s")
@@ -251,10 +319,23 @@ def ensure_caption(text: str) -> None:
         fill_text(text)
 
 
-def assert_caption_before_post(text: str) -> None:
+def caption_box_shown() -> bool:
+    try:
+        return bool(eval_retry("""() => [...document.querySelectorAll("[contenteditable='true']")]
+            .some(x => x.getBoundingClientRect().width > 0)"""))
+    except FoxError:
+        return True
+
+
+def assert_caption_before_post(text: str, stepped: bool = False) -> None:
     """Kiem tra lai noi dung NGAY TRUOC khi bam Dang (Facebook co the xoa chu trong luc cho tai/xu ly); khong co thi
-    dien lai, van khong co thi bao loi de KHONG dang bai trong chu."""
+    dien lai, van khong co thi bao loi de KHONG dang bai trong chu.
+    stepped: trinh soan thuoc phim (Tao -> Chinh sua -> Chia se) da qua buoc Tao, noi da dien va kiem tra noi dung;
+    buoc cuoi khong co o noi dung thi khong kiem tra lai duoc (dien lai se loi 'Khong thay o noi dung')."""
     if caption_ok(text):
+        return
+    if stepped and not caption_box_shown():
+        log("Buoc cuoi trinh soan thuoc phim khong co o noi dung (da kiem tra o buoc Tao) -> bam Dang")
         return
     log("Noi dung bi mat truoc khi bam Dang -> dien lai")
     fill_text(text)
@@ -276,18 +357,21 @@ def retry_step(what: str, fn, tries: int = INNER_TRIES):
             time.sleep(5 * i)
 
 
-def button_state(name: str, which: str = "last"):
-    """{'visible', 'disabled'} cua nut theo ten chinh xac (nut cuoi/dau), hoac None neu chua co."""
+def button_state(name: str, which: str = "last", bottom: bool = False):
+    """{'visible', 'disabled'} cua nut theo ten chinh xac (nut cuoi/dau), hoac None neu chua co.
+    bottom: chi nut o nua duoi man hinh (thanh nut Huy / Tiep / Dang), bo cac muc cung ten o thanh buoc phia tren
+    (trinh soan thuoc phim co buoc 'Chia se' trung ten nut cuoi)."""
     pick = "els[els.length - 1]" if which == "last" else "els[0]"
+    where = "&& e.getBoundingClientRect().top > innerHeight * 0.5" if bottom else ""
     return eval_retry("""() => {
         const els = [...document.querySelectorAll('button,[role="button"]')].filter(e =>
-            [e.getAttribute("aria-label"), e.innerText].some(t => (t || "").trim() === %s));
+            [e.getAttribute("aria-label"), e.innerText].some(t => (t || "").trim() === %s) WHERE);
         const e = %s;
         if (!e) return null;
         const r = e.getBoundingClientRect();
         return {visible: r.width > 0 && r.height > 0,
                 disabled: e.getAttribute("aria-disabled") === "true" || e.disabled === true};
-    }""" % (json.dumps(name), pick))
+    }""".replace("WHERE", where) % (json.dumps(name), pick))
 
 
 def wait_enabled(name: str, timeout_s: float, which: str = "last") -> None:
@@ -480,38 +564,41 @@ def publish_video(asset_id: str, video: Path, caption: str, upload_timeout: floa
     """Dang video NGAY (khong hen gio): Tao -> Chinh sua -> Chia se -> 'Dang'. Co `cover` thi dat anh bia."""
     def prepare() -> str:
         open_composer(asset_id, [video])
-        fill_text(caption)
+        # Cho tai len xong ROI moi go chu: trong luc trinh duyet day file len, bam / go deu treo toi het gio
+        # (2026-11-11, video 76 MB: 'Locator.click: Timeout 45000ms' ca 3 lan)
         wait_upload_done(upload_timeout)
+        fill_text(caption)
         if cover and SET_COVER:
             set_cover(cover, shot.with_name(f"{shot.stem}_cover_error.png"))
         ensure_caption(caption)
-        # Giao dien hien tai: chi co nut 'Dang'. Giao dien cu (thuoc phim) co them 1-2 buoc 'Tiep' truoc 'Chia se' -> bam neu thay.
-        final, clicked, deadline = "Đăng", 0, time.time() + min(upload_timeout, 600)
+        # Trinh soan bai thuong: chi co nut 'Dang'. Trinh soan thuoc phim (Facebook chon tuy luc, 2026-11-12 voi video
+        # 4:40): Tao -> Chinh sua -> Chia se, moi buoc 1 nut 'Tiep'. Bam 'Tiep' toi khi nut cuoi o thanh nut duoi san
+        # sang; KHONG dem so lan bam roi coi nhu xong (lan bam luc trang dang chuyen buoc bi bo qua).
+        clicked, deadline = 0, time.time() + min(upload_timeout, 600)
         while time.time() < deadline:
-            st = button_state("Đăng")
-            if st and st["visible"] and not st["disabled"]:
+            final = next((n for n in FINAL_BUTTONS if (st := button_state(n, bottom=True))
+                          and st["visible"] and not st["disabled"]), "")
+            if final:
                 break
-            nxt = button_state("Tiếp")
+            nxt = button_state("Tiếp", bottom=True)
             if nxt and nxt["visible"] and not nxt["disabled"]:
+                if clicked >= MAX_NEXT_CLICKS:
+                    raise RuntimeError(f"Da bam 'Tiếp' {clicked} lan van chua toi nut Dang")
                 clicked += 1
-                log(f"Click 'Tiếp' (buoc {clicked})")
+                log(f"Click 'Tiếp' (lan {clicked})")
                 fb.click(role_btn("Tiếp", "last"))
-                time.sleep(3)
-                if clicked >= 2:
-                    final = next((n for n in ("Đăng", "Chia sẻ", "Đăng ngay") if button_state(n)), "Đăng")
-                    break
+                time.sleep(4)  # cho trang chuyen buoc truoc khi xem lai nut
                 continue
             time.sleep(2)
         else:
             raise TimeoutError("Khong thay nut 'Đăng'/'Tiếp' san sang sau 600s")
-        wait_enabled(final, min(upload_timeout, 300))
-        return final
-    final = retry_step("dang video", prepare)
+        return final, clicked > 0
+    final, stepped = retry_step("dang video", prepare)
     if no_post:
         save_shot(shot)
         log(f"--no-post: anh form {shot} (nut cuoi: '{final}')")
         return
-    assert_caption_before_post(caption)
+    assert_caption_before_post(caption, stepped)
     wait_enabled(final, 60)
     log(f"Click '{final}' (nut cuoi)")
     try:
@@ -603,8 +690,10 @@ def job_files(job: dict) -> list[str]:
 
 
 def job_dir(job: dict) -> Path:
-    files = job_files(job)
-    return Path(files[0]).parent if files else LOG_DIR
+    """Noi luu anh chup (form --no-post, comment). Luon la thu muc logs: canh video la thu muc hang doi cua auto_post.py,
+    noi moi anh la 1 bai dang anh (2026-11-12: anh --no-post nam trong hang doi Muse9)."""
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    return LOG_DIR
 
 
 def run_job(job: dict, asset_id: str, a, save) -> None:
@@ -661,6 +750,18 @@ def load_pages(a) -> list[dict]:
     cache.parent.mkdir(parents=True, exist_ok=True)
     if a.list_pages or a.refresh_pages or not cache.exists():
         pages = list_pages()
+        # Trang thay trong bo chon nhung lan nay khong doc duoc asset_id: giu tu lan quet truoc. Trang khong con trong
+        # tai khoan thi bo (danh sach HTML + bo chon la day du).
+        try:
+            old = json.loads(cache.read_text(encoding="utf-8")) if cache.exists() else []
+        except ValueError:
+            old = []
+        have = {p["name"] for p in pages}
+        kept = [p for p in old if isinstance(p, dict) and p.get("name") in scan_skipped
+                and p.get("name") not in have and p.get("asset_id")]
+        if kept:
+            log(f"Giu {len(kept)} Trang tu lan quet truoc (lan nay khong doc duoc): {[p['name'] for p in kept]}")
+            pages += kept
         cache.write_text(json.dumps(pages, ensure_ascii=False, indent=2), encoding="utf-8")
         log(f"Da luu {len(pages)} Trang vao {cache}")
         return pages
@@ -803,7 +904,8 @@ def run(a) -> int:
                     if j["comment_attempts"] >= fanpage_jobs.COMMENT_MAX_ATTEMPTS:
                         j["comment_status"] = "failed"
                 failed += 1
-                save_shot(job_dir(j) / f"error_fb_biz_{p['asset_id']}.png")
+                # Anh loi vao logs\, KHONG canh video: thu muc hang doi auto_post coi moi anh la 1 bai dang
+                save_shot(LOG_DIR / f"{datetime.now():%Y%m%d_%H%M%S}_error_fb_biz_{p['asset_id']}.png")
                 save()
             if i < len(todo):
                 time.sleep(a.delay)

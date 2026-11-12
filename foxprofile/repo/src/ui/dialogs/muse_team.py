@@ -523,7 +523,9 @@ def open_muse_team_dialog(
         chief_part.visible = mode_group.value == "chief"
         chosen = "" if (post_profile.value or "-") == "-" else post_profile.value
         entry = mapped.get(chosen) or {}
-        post_note.visible = bool(chosen) and not (entry.get("fanpages") or entry.get("tiktok"))
+        post_note.visible = bool(chosen) and not (
+            entry.get("fanpages") or entry.get("tiktok") or entry.get("youtube")
+        )
         roles_column.controls = [r for n, r in member_rows.items() if n != chief_dropdown.value]
         roles_none.visible = not roles_column.controls
         for n, box in member_boxes.items():

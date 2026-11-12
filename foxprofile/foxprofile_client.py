@@ -56,6 +56,10 @@ class FoxProfileBrowser:
         # Tab dich (so thu tu hoac URL): thao tac tren tab do ma khong doi tab hien hanh / khong keo cua so len truoc.
         # None = tab hien hanh nhu cu. Can FoxProfile ho tro tham so "tab" (xem supports_tab()).
         self.tab = None
+        # True: truoc moi thao tac chuot / ban phim dua tab (so thu tu) len truoc. Camoufox moi tab 1 cua so; cua so
+        # nam duoi khong nhan su kien -> mouse.click treo toi 504 (2026-11-11, YouTube Studio, Business Suite).
+        # Script dang bai bat (fox_common.open_work_tab); bot giu False de khong keo cua so len truoc nguoi dung.
+        self.front_for_input = False
         self._root = f"{base_url}/api/v1"
         self._resolved = False
         self._http = requests.Session()
@@ -160,19 +164,31 @@ class FoxProfileBrowser:
     def url(self):
         return self.evaluate("() => location.href")
 
+    def _front(self):
+        if self.front_for_input and isinstance(self.tab, int):
+            try:
+                self._page("POST", f"tabs/{self.tab}/select", timeout=30)
+            except FoxError as e:
+                self.log(f"Khong dua tab {self.tab} len truoc duoc: {e}")
+
     def click(self, selector, timeout=10000):
+        self._front()
         return self._page("POST", "click", json={"selector": selector, "timeout": timeout})
 
     def click_at(self, x, y):
+        self._front()
         return self._page("POST", "click-at", json={"x": x, "y": y})
 
     def type_into(self, selector, text, timeout=10000):
+        self._front()
         return self._page("POST", "type", json={"selector": selector, "text": text, "clear": True, "timeout": timeout})
 
     def press(self, key, selector=None):
+        self._front()
         return self._page("POST", "press", json={"key": key, "selector": selector})
 
     def keyboard_type(self, text):
+        self._front()
         return self._page("POST", "keyboard", json={"text": text})
 
     def text_of(self, selector="body", max_chars=40000):
@@ -245,6 +261,8 @@ class FoxProfileBrowser:
     def upload(self, files, trigger=None, input_selector=None, timeout=15000):
         body = {"files": [str(f) for f in files], "timeout": timeout}
         if trigger:
+            # trigger = bam nut mo hop chon file: cua so nam duoi thi bam treo (Business Suite 2026-11-11, tap 3)
+            self._front()
             body["trigger"] = trigger
         if input_selector:
             body["input_selector"] = input_selector

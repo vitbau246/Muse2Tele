@@ -1,17 +1,18 @@
-"""Posting map for Muse2Tele auto-post: which Facebook Pages (by Page ID) and which TikTok account
-each FoxProfile profile may post to, plus how much and when. Kept in social_post/data/post_map.json:
+"""Posting map for Muse2Tele auto-post: which Facebook Pages (by Page ID), which TikTok account and
+which YouTube channel each FoxProfile profile may post to, plus how much and when. Kept in social_post/data/post_map.json:
 
     {"profiles": {"<profile>": {"fanpages": [{"id": "1234567890", "name": "Phim 365"}],
-                                "tiktok": "handle", "max_per_day": 3, "hours": "11-13, 19-23",
+                                "tiktok": "handle", "youtube": "Handle", "max_per_day": 3, "hours": "11-13, 19-23",
                                 "caption_lang": "en"}}}
 
 social_post/auto_post.py posts only to the Pages listed here (never to every Page the account
-manages), at most max_per_day posts per Page / TikTok account a day (0 = no limit), only inside
+manages), at most max_per_day posts per Page / TikTok account / YouTube channel a day (0 = no limit), only inside
 the hours (empty = any time), and never the same video twice to the same Page / account.
 fanpage_post.py picks each Page by its ID and stops if the logged-in account does not manage it;
 tiktok_post.py stops when the logged-in TikTok account is not the one listed. caption_lang: the
 Muse team bot asks for a caption in that language for videos posted through this profile.
-A Page ID or TikTok account can belong to one profile only.
+A Page ID, TikTok account or YouTube channel (handle without @, case kept, compared ignoring case)
+can belong to one profile only.
 
 "Check accounts" runs social_post/check_accounts.py for one profile in the background: it opens
 the profile, lists the Pages the Facebook account manages and reads the TikTok account, without
@@ -26,7 +27,9 @@ import re
 import subprocess
 import sys
 import time
+import unicodedata
 from dataclasses import dataclass, field
+from urllib.parse import unquote
 
 from .logging import get_logger
 from .muse_team import LANGS
@@ -40,6 +43,8 @@ MAX_PER_DAY = 100
 CHECK_STALE_SECONDS = 15 * 60
 PAGE_ID_RE = re.compile(r"^\d{5,25}$")
 TIKTOK_RE = re.compile(r"^[a-z0-9._]{2,24}$")
+# YouTube handles may use letters of any script (@QuỳnhCosmos); \w is Unicode-aware, youtube_handle() NFC-normalises.
+YOUTUBE_RE = re.compile(r"^[\w.-]{3,30}$")
 HOURS_RE = re.compile(r"^(\d{1,2})\s*-\s*(\d{1,2})$")
 
 
@@ -78,11 +83,41 @@ def known_pages(profile: str) -> list[dict[str, str]]:
     ]
 
 
+def _cache(name: str, profile: str) -> dict:
+    try:
+        raw = json.loads((data_dir() / f"{name}_{_safe(profile)}.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def known_tiktok(profile: str) -> str:
+    """TikTok account last seen logged in on this profile (check_accounts.py: tt_account_<profile>.json)."""
+    return tiktok_handle(_cache("tt_account", profile).get("account"))
+
+
+def known_youtube(profile: str) -> list[dict[str, str]]:
+    """YouTube channels the profile's Google account manages (youtube_post.py --list-channels:
+    yt_channels_<profile>.json): [{"name", "handle"}]."""
+    out = []
+    for c in _cache("yt_channels", profile).get("channels") or []:
+        if isinstance(c, dict) and YOUTUBE_RE.match(str(c.get("handle") or "")):
+            out.append({"name": str(c.get("name") or ""), "handle": str(c["handle"])})
+    return out
+
+
 def tiktok_handle(raw: object) -> str:
     """'@Abc.Def', 'https://www.tiktok.com/@abc.def?lang=vi' -> 'abc.def'."""
     text = str(raw or "").strip()
     m = re.search(r"tiktok\.com/@([^/?#\s]+)", text)
     return (m.group(1) if m else text).lstrip("@").strip().lower()
+
+
+def youtube_handle(raw: object) -> str:
+    """'@LongTamHoRong', 'https://www.youtube.com/@LongTamHoRong/videos' -> 'LongTamHoRong' (case kept)."""
+    text = unicodedata.normalize("NFC", unquote(str(raw or "").strip()))
+    m = re.search(r"youtube\.com/@([^/?#\s]+)", text, re.IGNORECASE)
+    return (m.group(1) if m else text).lstrip("@").strip()
 
 
 def page_ids(raw: object) -> list[str]:
@@ -122,6 +157,8 @@ def _clean(raw: object) -> dict[str, dict]:
         ]
         tiktok = tiktok_handle(item.get("tiktok"))
         tiktok = tiktok if TIKTOK_RE.match(tiktok) else ""
+        youtube = youtube_handle(item.get("youtube"))
+        youtube = youtube if YOUTUBE_RE.match(youtube) else ""
         try:
             per_day = min(MAX_PER_DAY, max(0, int(item.get("max_per_day") or 0)))
         except (TypeError, ValueError):
@@ -131,9 +168,9 @@ def _clean(raw: object) -> dict[str, dict]:
         except PostMapError:
             span = ""
         lang = str(item.get("caption_lang") or "")
-        if str(name).strip() and (pages or tiktok or per_day or span or lang in LANGS and lang):
-            out[str(name).strip()] = {"fanpages": pages, "tiktok": tiktok, "max_per_day": per_day,
-                                      "hours": span, "caption_lang": lang if lang in LANGS else ""}
+        if str(name).strip() and (pages or tiktok or youtube or per_day or span or lang in LANGS and lang):
+            out[str(name).strip()] = {"fanpages": pages, "tiktok": tiktok, "youtube": youtube,
+                                      "max_per_day": per_day, "hours": span, "caption_lang": lang if lang in LANGS else ""}
     return out
 
 
@@ -148,11 +185,13 @@ def current() -> PostMap:
 
 
 def save(profiles: dict[str, dict]) -> PostMap:
-    """profiles: name -> {"fanpages": IDs (list or text), "tiktok": handle or link, "max_per_day",
+    """profiles: name -> {"fanpages": IDs (list or text), "tiktok": handle or link,
+    "youtube": channel handle or link, "max_per_day",
     "hours", "caption_lang"}. Page names are filled in from the Pages last found for that profile."""
     clean: dict[str, dict] = {}
     owner_page: dict[str, str] = {}
     owner_tiktok: dict[str, str] = {}
+    owner_youtube: dict[str, str] = {}
     for name, item in (profiles or {}).items():
         name = str(name).strip()
         if not name or not isinstance(item, dict):
@@ -166,6 +205,9 @@ def save(profiles: dict[str, dict]) -> PostMap:
         tiktok = tiktok_handle(item.get("tiktok"))
         if tiktok and not TIKTOK_RE.match(tiktok):
             raise PostMapError(f"{name}: not a TikTok username: {tiktok[:40]}")
+        youtube = youtube_handle(item.get("youtube"))
+        if youtube and not YOUTUBE_RE.match(youtube):
+            raise PostMapError(f"{name}: not a YouTube channel handle: {youtube[:40]}")
         try:
             per_day = int(item.get("max_per_day") or 0)
         except (TypeError, ValueError):
@@ -184,11 +226,16 @@ def save(profiles: dict[str, dict]) -> PostMap:
             if tiktok in owner_tiktok:
                 raise PostMapError(f"TikTok @{tiktok} is mapped to both {owner_tiktok[tiktok]} and {name}")
             owner_tiktok[tiktok] = name
-        if not (ids or tiktok or per_day or span or lang):
+        if youtube:
+            key = youtube.lower()
+            if key in owner_youtube:
+                raise PostMapError(f"YouTube @{youtube} is mapped to both {owner_youtube[key]} and {name}")
+            owner_youtube[key] = name
+        if not (ids or tiktok or youtube or per_day or span or lang):
             continue
         names = {p["id"]: p["name"] for p in known_pages(name)}
         clean[name] = {"fanpages": [{"id": i, "name": names.get(i, "")} for i in ids], "tiktok": tiktok,
-                       "max_per_day": per_day, "hours": span, "caption_lang": lang}
+                       "youtube": youtube, "max_per_day": per_day, "hours": span, "caption_lang": lang}
     path = config_file()
     if not path.parent.parent.is_dir():
         raise PostMapError(f"social_post folder not found: {path.parent.parent}")

@@ -34,7 +34,26 @@ RESTART_GAP_SECONDS = 300  # trinh duyet treo: khoi dong lai profile toi da 1 la
 # hoac cau tra loi dang duoc viet ra. Kiem tra tren muse.ai ngay 2026-10-28.
 BUSY_JS = """() => [...document.querySelectorAll('[data-testid="hatch-composer-stop-button"]')]
   .some(b => !b.closest('[inert],[aria-hidden="true"]'))
-  || !!document.querySelector('[data-hatch-markdown-streaming="true"]')"""
+  || [...document.querySelectorAll('[data-hatch-markdown-streaming="true"]')].some(m => {
+       // Tin co nut lua chon: markdown ket "streaming" mai du Muse da xong (xem MESSAGES_JS, Muse8 2026-11-10)
+       const i = m.closest('[data-message-item]');
+       return !i || ![...i.querySelectorAll('[data-copy-exclude] button:not([aria-haspopup]):not([aria-label])')]
+         .some(b => b.innerText.trim()); })"""
+# Khung ten agent o dau chat ("status pill"): dong 1 la ten agent, dong 2 (chi co khi can) la viec Muse dang lam
+# ("Checking upload flags", "🎬 Generating image"...) hoac trang thai ket noi; luc ranh chi con ten. Bieu tuong dau
+# dong 2 la emoji (chu) hoac svg (bo qua). Lay dong 2 cuoi cung (luc doi trang thai dong cu co the con tam).
+# Viec chay nen (VD Muse8 tai video len Drive) van hien o day trong khi BUSY_JS = false (chat khong dang tra loi).
+# Kiem tra tren muse.ai ngay 2026-11-10.
+STATUS_JS = """() => { const busy = (%s)();
+  const p = document.querySelector('[data-hatch-avatar-accessory="status-pill"]');
+  if (!p) return {busy, name: '', status: '', icon: ''};
+  const n = p.querySelector(':scope > span span[title]');
+  const rows = [...p.querySelectorAll(':scope > div > span')].filter(r => r.querySelector('span[title]'));
+  const row = rows[rows.length - 1];
+  const icon = row && row.querySelector(':scope > span[aria-hidden="true"]');
+  return {busy, name: n ? n.title.trim() : (p.getAttribute('aria-label') || '').trim(),
+          status: row ? row.querySelector('span[title]').title.trim() : '',
+          icon: icon && !icon.querySelector('svg') ? icon.textContent.trim() : ''}; }""" % BUSY_JS
 # Cac tin trong chat (40 tin cuoi): id, role; tin cua Muse kem text (da xong hay dang viet) va anh/video/file dinh kem
 # (data-testid hatch-chat-attachment-presentation-<loai>, src thuong la blob:). Kiem tra 2026-10-28.
 # Anh/video chi nap khi khung cua no nam trong vung nhin thay: cuon khung dau tien chua nap vao giua man hinh.
@@ -140,10 +159,15 @@ MESSAGES_JS = r"""() => {
   const body = item.querySelector('[data-hatch-assistant-message-body]');
   // Tin dang viet / vua viet: [data-hatch-markdown-streaming]; tai lai trang thi tin cu hien bang
   // [data-hatch-plain-text] (van co the la markdown da render). Kiem tra 2026-10-30.
-  const live = body && body.querySelector('[data-hatch-markdown-streaming]');
-  const md = live || (body && body.querySelector('[data-hatch-plain-text]'));
-  out.text = md ? md.innerText.trim() : '';
-  out.html = md ? tg(md, 0).replace(/\n{3,}/g, '\n\n').trim() : '';
+  // 1 tin co the gom nhieu bong (data-chat-bubble-surface-*): bong cau hoi + nut lua chon nam NGOAI body, chi bong
+  // cuoi trong body (Muse8 2026-11-10) -> lay chu moi bong theo thu tu (cung cho: uu tien khoi dang viet).
+  const mdSel = '[data-hatch-markdown-streaming],[data-hatch-plain-text]';
+  const blocks = [...item.querySelectorAll(mdSel)].filter(m =>
+    !m.parentElement.closest(mdSel) && !m.closest('[data-testid^="hatch-chat-attachment-presentation-"]'));
+  const mds = blocks.filter(m => !(m.hasAttribute('data-hatch-plain-text') && blocks.some(o => o !== m
+    && o.hasAttribute('data-hatch-markdown-streaming') && o.parentElement === m.parentElement)));
+  out.text = mds.map(m => m.innerText.trim()).filter(Boolean).join('\n\n');
+  out.html = mds.map(m => tg(m, 0).replace(/\n{3,}/g, '\n\n').trim()).filter(Boolean).join('\n\n');
   // The link rieng (VD link tai file Muse vua upload): khung widget chi co <a href> + tieu de, khong co than markdown
   // hay khung dinh kem. Kiem tra 2026-10-29.
   // Link kho cong khai cua Muse (https://muse.ai/files/.../ten.mp4) tai thang duoc, khong can dang nhap: gui kem file.
@@ -197,14 +221,25 @@ MESSAGES_JS = r"""() => {
     const strong = w.parentElement && w.parentElement.querySelector('[data-streamdown="strong"], strong, b');
     const title = (strong ? strong.innerText : (w.getAttribute('aria-label') || '').replace(/^Open (animated )?video\s*/i, '')).trim();
     linked.push({kind: 'video', src, title: title || file, name: file});
+    // Muse viet "Link tai: https://muse.ai/files/..." thi giao dien bien link thanh khung video: innerText chi con
+    // "Link tai:" trong (Muse8 2026-11-10). In lai URL de Telegram (va bao cao viec) luon co link tai.
+    if (!out.text.includes(src)) {
+      out.text = (out.text ? out.text + '\n' : '') + '🔗 ' + file + ': ' + src;
+      out.html = (out.html ? out.html + '\n\n' : '') + '🔗 <b>' + esc(file) + '</b>\n<a href="'
+        + esc(src).replace(/"/g, '&quot;') + '">' + esc(src) + '</a>';
+    }
   }
-  out.streaming = !!(md && md.getAttribute('data-hatch-markdown-streaming') === 'true')
-    || item.querySelector('[aria-busy="true"]') !== null;
-  // Muse hoi lua chon bang khung nut rieng duoi chu (khong co dong [[nút: ...]]): lay nhan cac nut; nut "More options"
-  // la dropdown (aria-haspopup). Da chon tren web (data-selected) thi thoi. Kiem tra 2026-10-29.
-  const opts = body ? [...body.querySelectorAll('[data-copy-exclude] button:not([aria-haspopup])')] : [];
+  // Muse hoi lua chon bang khung nut rieng duoi chu (khong co dong [[nút: ...]]): lay nhan cac nut trong ca tin (tu
+  // 2026-11-10 khung nut nam o bong dau, ngoai body); nut React / Reply / More options co aria-label, khong co chu.
+  // Da chon tren web (data-selected) thi thoi. Kiem tra 2026-10-29, 2026-11-10.
+  const opts = [...item.querySelectorAll('[data-copy-exclude] button:not([aria-haspopup]):not([aria-label])')]
+    .filter(b => b.innerText.trim());
   out.choices = opts.some(b => b.getAttribute('data-selected') === 'true') ? []
-    : opts.map(b => b.innerText.trim()).filter(Boolean);
+    : opts.map(b => b.innerText.trim());
+  // Tin co nut lua chon = Muse da viet xong, dang cho tra loi: markdown cua no ket data-hatch-markdown-streaming="true"
+  // mai (khong co nut Stop) -> khong tinh la dang viet (truoc day bot cho mai, khong gui). Muse8 2026-11-10.
+  out.streaming = !opts.length && (mds.some(m => m.getAttribute('data-hatch-markdown-streaming') === 'true')
+    || item.querySelector('[aria-busy="true"]') !== null);
   // Ten audio khong hien tren trang: lay displayText trong props React cua khung (Camoufox: qua wrappedJSObject), du
   // phong dong doc cho trinh doc man hinh "Assistant message: <ten>" (chi co khi tin chua render).
   const said = p => presOf(p).displayText
@@ -255,7 +290,9 @@ FETCH_JS = """async () => { const r = await fetch(%s); const b = await r.blob();
 # Mo khung xem file cua Muse (bam the file trong tin, panel hatch-file-editor) va doc noi dung goc (markdown chua render)
 # trong props React "content" cua trinh soan thao, roi dong panel. Panel khong co noi dung chu (VD PDF): null.
 # The file chi render khi nam trong vung nhin. Kiem tra 2026-10-30.
-FILE_JS = """async () => { const id = %s, name = %s, sleep = ms => new Promise(r => setTimeout(r, ms));
+# Dung panel cua file: tieu de panel co the la ten file (abc.md) HOAC nhan Muse dat (VD "Kich ban ... (ban nhap)",
+# 2026-11-12), nen so ca 2, them props filePath cua trinh soan thao (".../abc.md").
+FILE_JS = """async () => { const id = %s, name = %s, label = %s, sleep = ms => new Promise(r => setTimeout(r, ms));
   let card;
   for (let i = 0; i < 20 && !card; i++) {
     const e = [...document.querySelectorAll('[data-message-item]')].find(e => e.getAttribute('data-message-id') === id);
@@ -264,18 +301,21 @@ FILE_JS = """async () => { const id = %s, name = %s, sleep = ms => new Promise(r
     card = e.querySelector('[data-testid^="hatch-chat-file-card-"]'); }
   if (!card) throw new Error('the file khong hien');
   card.click();
-  const contentOf = ed => { const w = ed.wrappedJSObject || ed;
+  const propOf = (ed, key) => { const w = ed.wrappedJSObject || ed;
     const stack = [w[Object.keys(w).find(k => k.startsWith('__reactFiber'))].child];
     for (let n = 0; stack.length && n < 2000; n++) { const f = stack.pop(); if (!f) continue;
-      const c = f.memoizedProps && f.memoizedProps.content; if (typeof c === 'string') return c;
+      const c = f.memoizedProps && f.memoizedProps[key]; if (typeof c === 'string') return c;
       stack.push(f.sibling, f.child); }
     return null; };
+  const isOurs = (ed, fn) => { if (!name) return true; const t = fn.getAttribute('title');
+    if (t === name || (label && t === label)) return true;
+    const p = propOf(ed, 'filePath'); return !!p && (p === name || p.endsWith('/' + name)); };
   let text = null;
   try {
     for (let i = 0; i < 20 && text === null; i++) { await sleep(500);
       const ed = document.querySelector('[data-testid="hatch-file-editor"]');
       const fn = document.querySelector('[data-testid="hatch-file-editor-file-name"]');
-      if (ed && fn && (!name || fn.getAttribute('title') === name)) text = contentOf(ed); }
+      if (ed && fn && isOurs(ed, fn)) text = propOf(ed, 'content'); }
   } finally {
     const x = document.querySelector('[data-testid="hatch-file-editor-close"]'); if (x) x.click(); }
   return text; }"""
@@ -394,6 +434,15 @@ def is_busy(fox):
         return bool(fox.evaluate(BUSY_JS))
 
 
+def status(fox):
+    """Trang thai Muse trong chat cua fox (chat_browser): {busy, name: ten agent, status: viec dang lam / trang thai
+    ket noi ("" = khong co), icon: emoji dau dong trang thai ("" = khong co)}. Xem STATUS_JS."""
+    with lock_for(fox.profile):
+        st = fox.evaluate(STATUS_JS) or {}
+    return {"busy": bool(st.get("busy")), "name": st.get("name") or "", "status": st.get("status") or "",
+            "icon": st.get("icon") or ""}
+
+
 def messages(fox):
     """Cac tin cuoi trong chat cua fox (xem MESSAGES_JS)."""
     with lock_for(fox.profile):
@@ -417,11 +466,56 @@ def reload_chat(fox, url):
         fox.wait_visible(MUSE_INPUT, 30)
 
 
-def fetch_media(fox, src):
-    """Tai anh/video/file Muse dinh kem (src thuong la blob:) ngay trong trang. Tra ve (bytes, mime)."""
+class MediaTooLarge(Exception):
+    """File qua gioi han (vd 50 MB cua Telegram): khong tai ve."""
+
+
+DIRECT_TIMEOUT = (15, 60)  # (ket noi, moi lan doc) khi tai thang link cong khai
+DIRECT_TOTAL_SECONDS = 600
+
+
+def _fetch_direct(src, limit):
+    """Tai thang link https (kho cong khai muse.ai/files/..., khong can dang nhap), xem dung luong truoc. Qua limit:
+    MediaTooLarge. Tra ve (bytes, mime)."""
+    import requests
+    with requests.get(src, stream=True, timeout=DIRECT_TIMEOUT) as r:
+        r.raise_for_status()
+        size = int(r.headers.get("Content-Length") or 0)
+        if limit and size > limit:
+            raise MediaTooLarge(f"{size / 1048576:.0f} MB, vượt giới hạn {limit // 1048576} MB của Telegram")
+        mime = (r.headers.get("Content-Type") or "").split(";")[0].strip()
+        buf, deadline = bytearray(), time.time() + DIRECT_TOTAL_SECONDS
+        for chunk in r.iter_content(1 << 16):
+            buf += chunk
+            if limit and len(buf) > limit:
+                raise MediaTooLarge(f"trên {limit // 1048576} MB, vượt giới hạn của Telegram")
+            if time.time() > deadline:
+                raise TimeoutError(f"quá {DIRECT_TOTAL_SECONDS}s chưa tải xong")
+    return bytes(buf), mime
+
+
+def fetch_media(fox, src, limit=0):
+    """Tai anh/video/file Muse dinh kem. Link https cong khai: tai thang (khong qua trinh duyet, xem dung luong truoc);
+    loi thi (va blob:) tai ngay trong trang. limit: so byte toi da (0 = khong gioi han), qua thi MediaTooLarge.
+    Tra ve (bytes, mime).
+    2026-11-10: video review 5 phut cua Muse8 doc qua trang (base64) qua 60s -> FoxProfile 504, Telegram khong nhan
+    duoc video lan link."""
+    if src.startswith("https://"):
+        try:
+            data, mime = _fetch_direct(src, limit)
+            if data and mime and not mime.startswith(("text/html", "application/json")):
+                return data, mime
+            logger.info(f"Tai thang {src[:80]}: nhan {mime or 'rong'}, thu qua trang")
+        except MediaTooLarge:
+            raise
+        except Exception as e:
+            logger.info(f"Tai thang {src[:80]} loi ({type(e).__name__}: {e}), thu qua trang")
     with lock_for(fox.profile):
         head, _, data = fox.evaluate(FETCH_JS % json.dumps(src)).partition(",")
-    return base64.b64decode(data), head.removeprefix("data:").split(";")[0]
+    data = base64.b64decode(data)
+    if limit and len(data) > limit:
+        raise MediaTooLarge(f"{len(data) / 1048576:.0f} MB, vượt giới hạn {limit // 1048576} MB của Telegram")
+    return data, head.removeprefix("data:").split(";")[0]
 
 
 def fetch_audio(fox, message_id, pos, size=0, path="", preview=""):
@@ -438,11 +532,11 @@ def fetch_audio(fox, message_id, pos, size=0, path="", preview=""):
     return data, head.removeprefix("data:").split(";")[0]
 
 
-def fetch_file(fox, message_id, name):
+def fetch_file(fox, message_id, name, label=""):
     """Noi dung chu cua file Muse dinh kem (VD .md) trong tin message_id, qua khung xem file cua Muse (xem FILE_JS).
-    None neu khung xem khong co noi dung chu."""
+    name: ten file (abc.md), label: nhan Muse hien tren the file. None neu khung xem khong co noi dung chu."""
     with lock_for(fox.profile):
-        return fox.evaluate(FILE_JS % (json.dumps(message_id), json.dumps(name)))
+        return fox.evaluate(FILE_JS % (json.dumps(message_id), json.dumps(name), json.dumps(label)))
 
 
 _restarted = {}  # profile -> luc khoi dong lai gan nhat

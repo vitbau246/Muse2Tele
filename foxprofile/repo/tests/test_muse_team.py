@@ -101,13 +101,13 @@ def test_reset_needs_the_bot_folder(tmp_path, monkeypatch):
 
 
 def test_template_fills_the_whole_team():
-    for tpl in muse_team.TEMPLATES:
-        assert {"id", "label", "chief", "member", "member_role"} <= set(tpl)
+    for tpl in muse_team.skills():
+        assert {"id", "label", "chief", "member", "member_role", "features", "settings"} <= set(tpl)
         for text in (tpl["chief"], tpl["member"]):
             assert len(text) <= muse_team.MAX_CONTEXT
             if tpl["id"].startswith("family"):
                 assert "Mẹ, 23 tuổi" in text  # same family on both sides
-    family = muse_team.TEMPLATES[0]
+    family = muse_team.skill("family")
     # chief: research, analysis, detailed scripts; members: characters + videos from the script
     assert all(w in family["chief"] for w in ("NGHIÊN CỨU", "PHÂN TÍCH", "KỊCH BẢN CHI TIẾT"))
     assert "không tự làm ảnh hay video" in family["chief"]
@@ -135,7 +135,10 @@ def test_wipe_only_the_muses_whose_context_changed(bot_dir):
 def test_every_template_fits_and_wordless_ones_say_so():
     ids = [t["id"] for t in muse_team.TEMPLATES]
     assert len(ids) == len(set(ids))
-    for tpl in muse_team.TEMPLATES[1:]:
+    assert {"family", "family_silent", "solo_physical", "animal_3d", "cat_life", "general"} <= set(ids)
+    for tpl in muse_team.TEMPLATES:
+        if tpl["id"] in ("family", "general"):
+            continue
         for text in (tpl["chief"], tpl["member"]):
             assert len(text) <= muse_team.MAX_CONTEXT and "KHÔNG LỜI" in text
 
@@ -200,3 +203,107 @@ def test_detach_route(bot_dir):
     with pytest.raises(HTTPException) as e:
         detach_muse_team_member(MuseTeamDetach(profile="nobody"), pm)
     assert e.value.status_code == 404
+
+
+# ---------- several teams (one Telegram group each) and skill packs ----------
+
+
+def test_single_team_file_is_read_as_the_default_team(bot_dir):
+    (bot_dir / muse_team.FILE_NAME).write_text(
+        json.dumps({"mode": "chief", "chief": "chief1", "one_video": False, "post_mode": "auto"}), encoding="utf-8"
+    )
+    cfg = muse_team.current()
+    assert (cfg.id, cfg.is_default, cfg.profiles) == (muse_team.DEFAULT_TEAM, True, None)
+    assert (cfg.mode, cfg.chief, cfg.one_video, cfg.post_mode) == ("chief", "chief1", False, "auto")
+    assert cfg.features == ["video"]  # the single-team bot always ran the video workflow
+    muse_team.save("chief", "chief1", "manual", {}, [], {}, False)
+    saved = json.loads((bot_dir / muse_team.FILE_NAME).read_text(encoding="utf-8"))
+    assert saved["version"] == 2 and [t["id"] for t in saved["teams"]] == [muse_team.DEFAULT_TEAM]
+
+
+def test_bot_state_of_the_single_group_bot_belongs_to_the_default_team(bot_dir):
+    bot_ran(bot_dir, "r1", topics=("muse_a",))
+    cfg = muse_team.current()
+    assert cfg.muse_profiles == ["muse_a"]
+    (bot_dir / muse_team.BOT_STATE_FILE).write_text(json.dumps({"teams": {
+        "default": {"topics": {"muse_a": 1}, "group": -100, "group_title": "Nhom 1"},
+        "t2": {"topics": {"muse_b": 2}, "group": -200, "team_reset": "x"}}}), encoding="utf-8")
+    team2 = muse_team.create_team("Second", ["muse_b"])
+    assert muse_team.current().group_title == "Nhom 1"
+    assert muse_team.current(team2.id).muse_profiles == []  # state of another id
+
+
+def test_teams_split_the_profiles(bot_dir):
+    second = muse_team.create_team("Đội 2", ["muse_b", "muse_c"])
+    assert second.profiles == ["muse_b", "muse_c"] and not second.is_default
+    default = muse_team.current()
+    assert default.assigned == {"muse_b": second.id, "muse_c": second.id}
+    names = ["chief1", "muse_a", "muse_b", "muse_c", "muse_d"]
+    assert muse_team.team_profiles(default, names) == ["chief1", "muse_a", "muse_d"]
+    assert muse_team.team_profiles(muse_team.current(second.id), names) == ["muse_b", "muse_c"]
+    # a profile is in one team only, and cannot lead a team it is not in
+    with pytest.raises(muse_team.MuseTeamError):
+        muse_team.create_team("Đội 3", ["muse_b"])
+    with pytest.raises(muse_team.MuseTeamError):
+        muse_team.save("chief", "muse_b", "manual", {}, [], {}, False)
+    # the chief joins its team's group
+    cfg = muse_team.save("chief", "muse_d", "auto", {}, [], {}, False, team_id=second.id, name="Video",
+                         profiles=["muse_b"])
+    assert cfg.profiles == ["muse_b", "muse_d"] and cfg.name == "Video" and cfg.chief == "muse_d"
+    assert "muse_c" not in muse_team.current().assigned  # unticked: back to the default team
+    # teams keep their own settings
+    assert muse_team.current().mode == "solo"
+    removed = muse_team.delete_team(second.id)
+    assert removed.is_default and [t["id"] for t in removed.teams] == [muse_team.DEFAULT_TEAM]
+    with pytest.raises(muse_team.MuseTeamError):
+        muse_team.delete_team(muse_team.DEFAULT_TEAM)
+
+
+def test_unknown_team_is_an_error(bot_dir):
+    with pytest.raises(muse_team.MuseTeamError):
+        muse_team.current("nope")
+
+
+def test_skill_pack_sets_the_video_settings(bot_dir):
+    cfg = muse_team.save("chief", "chief1", "manual", {}, [], {}, False, skill_id="general")
+    assert cfg.skill == "general" and cfg.features == []
+    assert (cfg.one_video, cfg.show_failed_media, cfg.post_mode) == (False, True, "off")
+    cfg = muse_team.save("chief", "chief1", "manual", {}, [], {}, False, skill_id="family")
+    assert cfg.features == ["video"] and (cfg.one_video, cfg.show_failed_media, cfg.post_mode) == (True, False, "ask")
+    # the owner's own choice wins over the pack's settings, and a plain save keeps them
+    cfg = muse_team.save("chief", "chief1", "manual", {}, [], {"one_video": False}, False, post_mode="auto")
+    assert (cfg.skill, cfg.one_video, cfg.post_mode) == ("family", False, "auto")
+    with pytest.raises(muse_team.MuseTeamError):
+        muse_team.save("chief", "chief1", "manual", {}, [], {}, False, skill_id="missing")
+
+
+def test_install_and_remove_a_skill_pack(bot_dir):
+    pack = {"id": "shop_review", "label": "Review sản phẩm", "chief": "lead", "member": "make",
+            "features": ["video", "bogus"], "settings": {"post_mode": "auto", "x": 1}, "license": "paid"}
+    got = muse_team.install_skill(pack)
+    assert got["source"] == "user" and got["features"] == ["video"]
+    assert got["settings"] == {"one_video": True, "show_failed_media": False, "post_mode": "auto"}
+    assert (bot_dir / "skills" / "shop_review.json").is_file()
+    assert muse_team.skill("shop_review")["license"] == "paid"
+    with pytest.raises(muse_team.MuseTeamError):  # built-in ids are taken
+        muse_team.install_skill({**pack, "id": "family"})
+    with pytest.raises(muse_team.MuseTeamError):
+        muse_team.install_skill({**pack, "chief": ""})
+    with pytest.raises(muse_team.MuseTeamError):
+        muse_team.remove_skill("family")
+    muse_team.remove_skill("shop_review")
+    assert muse_team.skill("shop_review") is None
+
+
+def test_team_routes(bot_dir):
+    from src.api.routes.settings import create_muse_team, get_muse_team, update_muse_team
+    from src.api.schemas.settings import MuseTeamCreate, MuseTeamUpdate
+
+    pm = _PM("chief1", "muse_a", "muse_b")
+    made = create_muse_team(MuseTeamCreate(name="Đội ảnh", team_profiles=["muse_b"]), pm)
+    assert made.name == "Đội ảnh" and made.group_profiles == ["muse_b"] and len(made.teams) == 2
+    out = update_muse_team(MuseTeamUpdate(mode="solo", team_profiles=["muse_a", "muse_b"], skill="general"), pm,
+                           made.id)
+    assert out.team_profiles == ["muse_a", "muse_b"] and out.skill == "general"
+    default = get_muse_team(pm)
+    assert default.group_profiles == ["chief1"] and default.assigned == {"muse_a": made.id, "muse_b": made.id}

@@ -179,6 +179,7 @@ def _auto_post(profile: Profile) -> ft.Control:
         for key, enabled in (
             ("auto_post_short_fanpage", profile.auto_post_fanpage),
             ("auto_post_short_tiktok", profile.auto_post_tiktok),
+            ("auto_post_short_youtube", profile.auto_post_youtube),
         )
         if enabled
     ]

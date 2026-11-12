@@ -158,13 +158,44 @@ main { min-width: 0; padding: 26px 32px 40px; }
 .empty h2 { margin: 0 0 6px; font-size: 18px; }
 .empty p { margin: 0 auto 18px; color: var(--ink-2); max-width: 46ch; }
 
+/* Posting map */
+.modal.wide:has(.pm-card) { width: min(1060px, 100%); }
+.pm-explain { margin-top: 6px; font-size: 13px; color: var(--ink-2); }
+.pm-explain summary { cursor: pointer; font-weight: 600; }
+.pm-toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 12px; position: sticky; top: 0; z-index: 2; padding: 8px 0; background: var(--paper-raised); }
+.pm-toolbar input[type=search] { flex: 1 1 200px; height: 34px; }
+.pm-card { margin-top: 12px; padding: 12px 14px 14px; border: 1px solid var(--rule); border-radius: 10px; background: var(--paper); }
+.pm-card.idle { opacity: .78; }
+.pm-card-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.pm-name { font-size: 15px; }
+.pm-filled { font-size: 12px; color: var(--cover); }
+.pm-check { margin-left: auto; height: 30px; padding: 0 10px; font-size: 12px; }
+.pm-head-check { font-size: 12px; margin-top: 4px; }
+.pm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; margin-top: 10px; }
+.pm-plat { padding: 8px 10px 10px; border: 1px solid var(--rule); border-radius: 8px; background: var(--paper-raised); min-width: 0; }
+.pm-plat.on { border-color: var(--cover); }
+.pm-plat .field { margin-top: 6px; }
+.pm-plat-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pm-tag { font-size: 11px; color: var(--ink-3); }
+.pm-plat.on .pm-tag { color: var(--cover); font-weight: 600; }
+.pm-sugg { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; font-size: 12px; color: var(--ink-3); }
+.pm-chip { height: 26px; max-width: 100%; padding: 0 9px; border-radius: 6px; border: 1px solid var(--rule-strong); background: var(--paper); cursor: pointer; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pm-chip:hover { border-color: var(--cover); }
+.pm-line { font-size: 12px; margin-top: 4px; color: var(--ink-2); overflow-wrap: anywhere; }
+.pm-line.bad { color: var(--err); }
+.pm-opts .field { margin-top: 0; }
 /* Modal */
 .modal-bg { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 20px; background: rgba(16, 38, 34, .42); animation: fade .16s ease-out; }
 .modal { width: min(500px, 100%); max-height: calc(100vh - 40px); overflow: auto; background: var(--paper-raised); border-radius: 12px; box-shadow: 0 24px 60px -12px rgba(16, 38, 34, .45), 0 2px 8px rgba(16, 38, 34, .12); animation: rise .22s var(--ease-out); }
 .modal.wide { width: min(740px, 100%); }
+/* Maximized dialog: nearly the whole viewport (button next to Close, choice kept in the browser) */
+.modal.max { width: calc(100vw - 40px); height: calc(100vh - 40px); max-height: none; display: flex; flex-direction: column; }
+.modal.max > form, .modal.max > div:not(.modal-head) { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.modal.max .modal-body { flex: 1; }
+.modal-head .head-btns { display: flex; gap: 4px; flex: none; }
 .modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 20px 22px 0; }
 .modal-head h2 { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -.01em; }
-.modal-head p { margin: 4px 0 0; color: var(--ink-2); font-size: 13.5px; }
+.modal-head p { margin: 4px 0 0; color: var(--ink-2); font-size: 13.5px; overflow-wrap: anywhere; }
 .modal-body { padding: 4px 22px 20px; }
 .modal-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 22px; border-top: 1px solid var(--rule); background: var(--paper); border-radius: 0 0 12px 12px; position: sticky; bottom: 0; }
 .inline-btns { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
@@ -184,6 +215,7 @@ main { min-width: 0; padding: 26px 32px 40px; }
 .opt b { display: block; font-weight: 600; font-size: 13.5px; }
 .opt span { display: block; font-size: 12.5px; color: var(--ink-3); }
 .member .check { margin-top: 0; margin-bottom: 6px; font-weight: 600; }
+.field.member > label.check { display: flex; }
 .member input:disabled { color: var(--ink-3); background: var(--paper-sunk); }
 .box .hint { margin-top: 8px; font-size: 12px; color: var(--ink-3); }
 .ap { display: inline-flex; gap: 4px; }
@@ -227,6 +259,37 @@ main { min-width: 0; padding: 26px 32px 40px; }
 pre.code { margin: 8px 0 0; padding: 12px 14px; border-radius: 8px; background: var(--cover-deep); color: #DDE8E3; font: 12px/1.55 var(--data); white-space: pre-wrap; word-break: break-all; max-height: 260px; overflow: auto; }
 .where-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }
 code { font-family: var(--data); font-size: 12.5px; background: var(--paper-sunk); padding: 1px 5px; border-radius: 4px; }
+
+/* Muse teams */
+.team-tabs { margin: 12px 0 4px; }
+.team-tabs button { display: inline-flex; align-items: center; gap: 6px; }
+.team-tabs button.add { border-style: dashed; background: transparent; }
+.team-tabs .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); opacity: .5; }
+.team-tabs .dot.on { background: var(--ok); opacity: 1; }
+.team-tabs button.active .dot { background: currentColor; opacity: 1; }
+details.sec { margin-top: 14px; border: 1px solid var(--rule); border-radius: 9px; background: var(--paper-raised); }
+details.sec > summary { cursor: pointer; padding: 10px 14px; font-weight: 600; font-size: 13.5px; list-style: none; display: flex; align-items: center; gap: 8px; }
+details.sec > summary::-webkit-details-marker { display: none; }
+details.sec > summary::before { content: "▸"; color: var(--ink-3); transition: transform .15s; }
+details.sec[open] > summary::before { transform: rotate(90deg); }
+details.sec > .sec-body { padding: 0 14px 14px; border-top: 1px solid var(--rule); }
+details.sec > .sec-body > .sec-title:first-child, details.sec > .sec-body > .explain:first-child { margin-top: 10px; }
+.pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 0 12px; }
+.pgrid .check.off { color: var(--ink-3); cursor: default; }
+.pgrid .minor { font-size: 11.5px; color: var(--ink-3); }
+.skill-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; margin-top: 10px; }
+.skill { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 9px; background: var(--paper); }
+.skill.on { border-color: var(--cover); box-shadow: inset 0 0 0 1px var(--cover); }
+.skill-top { display: flex; align-items: flex-start; gap: 6px; justify-content: space-between; }
+.skill-top b { font-size: 13.5px; font-weight: 600; }
+.skill .pill { flex: none; font-size: 10.5px; font-weight: 600; padding: 1px 6px; border-radius: 9px; background: var(--cover); color: var(--cover-ink); }
+.skill .tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.skill .tags i { font-style: normal; font-size: 10.5px; font-weight: 600; padding: 0 5px; border-radius: 3px; border: 1px solid var(--rule-strong); color: var(--ink-2); }
+.skill p { margin: 0; font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+.skill-foot { display: flex; align-items: center; gap: 6px; margin-top: auto; }
+.skill-foot .minor { font-size: 11.5px; color: var(--ink-3); }
+.skill-foot .btn { height: 30px; padding: 0 10px; font-size: 12.5px; }
+@media (max-width: 560px) { .field-row { grid-template-columns: 1fr; } }
 
 /* Toast */
 .toast { position: fixed; right: 20px; bottom: 20px; z-index: 50; display: flex; align-items: center; gap: 10px; max-width: 440px; padding: 12px 16px; border-radius: 10px; background: var(--ink); color: #F2F4F1; box-shadow: 0 12px 30px -8px rgba(0,0,0,.4); animation: rise .2s var(--ease-out); }
@@ -325,6 +388,8 @@ code { font-family: var(--data); font-size: 12.5px; background: var(--paper-sunk
   <symbol id="i-edit" viewBox="0 0 24 24"><path d="M16.9 3.6a2.3 2.3 0 0 1 3.3 3.3L8 19.1l-4.5 1.2 1.2-4.5Z"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 6.5h16M18.5 6.5v12.5a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2V6.5M9 6.5V4.5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 4.5v2M10 11v6M14 11v6"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-max" viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></symbol>
+  <symbol id="i-min" viewBox="0 0 24 24"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></symbol>
   <symbol id="i-back" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7M19 12H5"/></symbol>
   <symbol id="i-reload" viewBox="0 0 24 24"><path d="M20.5 12a8.5 8.5 0 1 1-2.5-6l2.5 2.5M20.5 3.5v5h-5"/></symbol>
   <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7.5a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></symbol>
@@ -446,7 +511,7 @@ const I18N = {
     export_txt: "Xuất cookies.txt", export_txt_hint: "Netscape: yt-dlp, curl, wget", import: "Nhập cookie", import_hint: "Từ file JSON hoặc cookies.txt",
     reset_fp: "Tạo fingerprint mới", reset_fp_hint: "Lần mở sau trang web sẽ thấy một thiết bị khác", fp_title: "Fingerprint hiện tại", no_fp: "Chưa có fingerprint. Nó được tạo ở lần mở đầu tiên.",
     fp_platform: "Nền tảng", fp_screen: "Màn hình", fp_cpu: "CPU",
-    confirm_reset: "Tạo fingerprint mới cho “{name}”? Trang web sẽ thấy đây là một máy khác.", close: "Đóng",
+    confirm_reset: "Tạo fingerprint mới cho “{name}”? Trang web sẽ thấy đây là một máy khác.", close: "Đóng", modal_maximize: "Phóng to", modal_restore: "Thu nhỏ",
     launching: "Đang mở {name}...", started: "Đã mở {name}", stopped: "Đã dừng {name}", created: "Đã tạo {name}", saved: "Đã lưu",
     deleted: "Đã xoá {name}", deleted_n: "Đã xoá {n} profile", exported: "Đã xuất {n} cookie", imported: "Đã nhập {n} cookie", fp_reset: "Đã tạo fingerprint mới",
     settings_button: "Thư mục tải về", settings_title: "Thư mục tải về", settings_sub: "File tải từ trình duyệt của mọi profile được lưu vào đây. Đổi xong áp dụng ngay, kể cả profile đang chạy.",
@@ -459,17 +524,21 @@ const I18N = {
     muse_dir_explain: "Ảnh, video, file bạn gửi vào topic Telegram được lưu tạm ở đây rồi bot mới đính kèm lên Muse. Thư mục này phải nằm trong một thư mục upload ở trên. Bot đọc giá trị này lúc khởi động: đổi xong hãy chạy lại start_bot.bat.",
     muse_dir_default: "Để trống để dùng mặc định: {path}", muse_dir_outside: "Thư mục này nằm ngoài các thư mục upload: FoxProfile sẽ từ chối file của bot.",
     upload_saved: "Đã lưu thư mục upload. Mở lại profile đang chạy và bot để áp dụng.",
-    auto_post_title: "Tự động đăng bài", auto_post_fanpage: "Tự động đăng lên fanpage Facebook", auto_post_tiktok: "Tự động đăng lên TikTok",
-    auto_post_hint: "Muse2Tele đăng bằng chính tài khoản đã đăng nhập trong profile này. Hãy đăng nhập Facebook / TikTok trên trình duyệt của profile trước.",
+    video_save_label: "Tự động lưu video Muse", video_save_on: "Lưu mọi video Muse gửi về máy này",
+    video_save_explain: "Bot giữ 1 bản của mỗi video tải từ chat Muse, kể cả video giữ lại không lên Telegram hay quá lớn để gửi. Mỗi Muse 1 thư mục con, ví dụ {example}. Áp dụng ngay, không cần chạy lại bot.",
+    video_save_default: "Để trống để dùng mặc định: {path}",
+    auto_post_title: "Tự động đăng bài", auto_post_fanpage: "Tự động đăng lên fanpage Facebook", auto_post_tiktok: "Tự động đăng lên TikTok", auto_post_youtube: "Tự động đăng lên kênh YouTube",
+    auto_post_hint: "Muse2Tele đăng bằng chính tài khoản đã đăng nhập trong profile này. Hãy đăng nhập Facebook / TikTok / YouTube trên trình duyệt của profile trước.",
     auto_post_off: "Không tự đăng",
-    team_button: "Đội Muse", team_title: "Đội Muse", team_sub: "Cách các Muse trong nhóm Telegram làm việc với nhau. Lưu vào {path}; bot áp dụng ngay.",
+    team_button: "Đội Muse", team_title: "Đội Muse", team_sub: "Mỗi đội làm việc trong 1 nhóm Telegram riêng. Lưu vào {path}; bot áp dụng ngay.",
+    team_tabs: "Các đội Muse", team_tab_chief: "chỉ huy", team_add: "Thêm đội", team_add_prompt: "Tên đội mới (mỗi đội dùng 1 nhóm Telegram riêng):", team_add_default: "Đội {n}", team_added: "Đã tạo đội {name}. Thêm bot vào 1 nhóm Telegram mới (bật Chủ đề), gõ /setup rồi chọn đội này.", team_switch_unsaved: "Bỏ các thay đổi chưa lưu của đội này?", team_section_group: "Đội và nhóm Telegram", team_name_label: "Tên đội", team_name_missing: "Hãy đặt tên đội.", team_group_linked: "Đang làm việc ở nhóm Telegram: {title}", team_group_none: "Chưa gắn nhóm Telegram", team_group_none_how: "Đội {name} chưa có nhóm Telegram: tạo nhóm mới, bật Chủ đề (Topics), thêm bot làm quản trị viên (quyền Quản lý chủ đề), gõ /setup trong nhóm rồi chọn đội này.", team_delete: "Xoá đội", team_delete_confirm: "Xoá đội {name}?\n\nProfile của đội về đội mặc định; bot ngừng dùng nhóm Telegram của đội. Việc, video mẫu và kịch bản của đội không còn hiện.", team_deleted: "Đã xoá đội {name}.", team_profiles_label: "Profile trong nhóm của đội", team_profiles_explain: "Tick profile thuộc đội này: bot tạo topic cho profile trong nhóm của đội. Mỗi profile chỉ thuộc 1 đội; profile không tick về đội mặc định.", team_profiles_default: "Đội mặc định nhận mọi profile chưa thuộc đội khác (profile mới cũng vào đây). Muốn chuyển profile sang đội khác: mở đội đó và tick profile.", team_section_lead: "Chỉ huy, gửi việc và thành viên", skill_label: "Skill (mẫu ngữ cảnh + thiết lập)", skill_explain: "Skill là gói mẫu cho 1 kiểu việc: ngữ cảnh cho chỉ huy, cho thành viên, vai trò và thiết lập đi kèm (vd quy trình làm video). Áp dụng = điền cho cả đội đang tick; sửa lại được trước khi lưu.", skill_apply: "Áp dụng", skill_reapply: "Điền lại", skill_in_use: "đang dùng", skill_free: "miễn phí", skill_installed: "đã cài", skill_tag_video: "video", skill_tag_general: "việc chung", skill_remove: "Gỡ", skill_remove_confirm: "Gỡ skill {name} khỏi máy này? Đội đang dùng vẫn giữ ngữ cảnh đã điền.", skill_install: "Cài skill từ file (.json)", skill_installed_ok: "Đã cài skill {name}.", skill_install_error: "Không cài được skill: {message}", skill_none: "Không dùng skill (tự viết ngữ cảnh)", skill_applied: "Đã điền skill {name} cho: {names}. Bấm Lưu để áp dụng.", skill_settings_label: "Thiết lập theo skill", skill_video_on: "Quy trình làm video", skill_video_on_explain: "Bot tải video mẫu từ link, đo kỹ thuật video nộp, chia bước tạo hình, nhận việc nhiều video / chia đoạn, ghi caption và đăng video đạt. Skill video tự bật; tắt cho đội làm việc khác (viết, nghiên cứu, ảnh).",
     team_mode_label: "Chế độ làm việc", team_mode_solo: "Độc lập", team_mode_solo_explain: "Mỗi Muse tự làm trong topic của mình. Bạn nhắn trực tiếp cho từng Muse.",
     team_mode_chief: "Có chỉ huy", team_mode_chief_explain: "Một Muse làm chỉ huy ở mục General của nhóm: chia yêu cầu của bạn thành việc, giao cho các Muse khác, theo dõi tiến độ và chấm chất lượng. Bạn vẫn nhắn riêng được cho từng Muse trong topic của nó.",
     team_chief_label: "Muse chỉ huy", team_chief_hint: "Chọn profile", team_chief_note: "Nên chọn Muse không dùng cho việc khác: khung chat của nó dùng để điều phối cả đội.",
     team_approval_label: "Gửi việc", team_approval_manual: "Duyệt tay", team_approval_manual_explain: "Mỗi việc chỉ huy giao hiện trong General kèm nút Gửi / Bỏ. Bạn bấm Gửi thì việc mới đến Muse.",
     team_approval_auto: "Tự động", team_approval_auto_explain: "Chỉ huy giao là việc được gửi ngay (giới hạn số lần làm lại và số việc mỗi giờ ở phần dưới).",
     team_roles_label: "Thành viên và vai trò", team_roles_explain: "Bỏ tick một Muse để đưa nó ra khỏi đội: chỉ huy không biết đến và không giao việc cho Muse đó. Vai trò ghi Muse giỏi việc gì (vd viết kịch bản video, làm ảnh) để chỉ huy chọn người làm; để trống nếu không có vai trò cố định. Profile mới tạo tự vào đội.",
-    team_roles_none: "Chưa có profile nào khác.", team_member_hint: "Trong đội", team_no_members: "Hãy tick ít nhất 1 Muse cho chỉ huy điều phối.", team_chief_missing: "Hãy chọn Muse chỉ huy.", team_saved: "Đã lưu đội Muse. Bot áp dụng ngay.",
+    team_roles_none: "Chưa có profile nào khác.", team_member_hint: "Trong đội", team_no_members: "Hãy tick ít nhất 1 Muse cho chỉ huy điều phối.", team_chief_missing: "Hãy chọn Muse chỉ huy.", team_saved: "Đã lưu đội {name}. Bot áp dụng ngay.",
     team_review_label: "Duyệt kết quả", team_pass_score: "Điểm tối thiểu để đạt (/10)", team_pass_score_hint: "Chỉ huy chấm dưới mức này: bot tự gửi nhận xét để Muse làm lại.",
     team_max_rounds: "Số lần làm lại tối đa", team_max_rounds_hint: "Mỗi việc (mỗi video). Hết lượt vẫn chưa đạt: bot dừng việc và báo bạn.", team_max_new: "Số việc mới tối đa mỗi giờ",
     team_quiet: "Số phút im lặng", team_quiet_hint: "Muse đang làm mà rảnh và im lặng chừng này phút chưa báo xong: bot nhắc 1 lần, sau đó báo chỉ huy.", team_overdue: "Báo quá hạn sau (phút)",
@@ -479,7 +548,8 @@ const I18N = {
     team_reset_confirm: "Xoá vĩnh viễn dữ liệu Muse của: {names}?\n\nLịch sử chat, file, artifact và tin nhắn trong topic bị xoá, không khôi phục được. Bỏ tick \"Xoá dữ liệu Muse\" nếu chỉ muốn lưu cài đặt.",
     team_saved_reset: "Đã lưu đội Muse. Bot đang xoá dữ liệu Muse của cả đội rồi giới thiệu lại đội cho chỉ huy.", team_full_reset: "Reset đội", team_full_reset_hint: "Đưa mọi thiết lập đội về mặc định và xoá dữ liệu các Muse", team_full_reset_confirm: "Reset toàn bộ đội Muse?\n\nMọi thiết lập về mặc định (từng Muse làm riêng, bỏ chỉ huy, vai trò, ngôn ngữ, ngữ cảnh, đăng video, thông số chấm).\nBot xoá vĩnh viễn dữ liệu Muse (chat, file, artifact, tin trong topic) của: {names}; bỏ mọi việc, video mẫu, kịch bản chốt; chuyển các bộ nhân vật khoá vào thư mục lưu trữ.\n\nKhông hoàn tác.", team_full_reset_none: "(không có Muse nào)", team_full_reset_done: "Đã reset đội Muse về mặc định. Bot đang xoá dữ liệu Muse của: {names}. Thiết lập lại đội từ đầu.", team_number_error: "{label}: nhập số nguyên từ {lo} đến {hi}.",
     team_detach_hint: "Tách Muse này khỏi đội", team_detach_explain: "{name} rời đội ngay (không cần bấm Lưu): chỉ huy không giao việc cho Muse này nữa và được giới thiệu lại đội, vai trò và ngữ cảnh đội của {name} bị bỏ, mọi việc đang mở của {name} bị huỷ, kể cả việc đang làm. Muốn cho vào đội lại thì tick lại.", team_detach_wipe: "Xoá luôn dữ liệu Muse (chat, file, artifact, tin trong topic) để Muse không còn nhớ gì của đội. Không hoàn tác. Không tick: bot nhắn Muse rằng nó đã rời đội.", team_detach_go: "Tách {name} khỏi đội", team_detach_confirm: "Tách {name} khỏi đội và xoá vĩnh viễn dữ liệu Muse của {name}?\n\nLịch sử chat, file, artifact và tin nhắn trong topic bị xoá, không khôi phục được.", team_detach_done: "Đã tách {name} khỏi đội. Bot huỷ các việc đang mở, nhắn Muse đã rời đội và giới thiệu lại đội cho chỉ huy.", team_detach_done_wipe: "Đã tách {name} khỏi đội. Bot huỷ các việc đang mở, xoá dữ liệu Muse và giới thiệu lại đội cho chỉ huy.",
-    post_map_per_day: "Tối đa bài/ngày", post_map_per_day_hint: "0 = không giới hạn; Facebook và TikTok tính riêng", post_map_hours: "Khung giờ đăng", post_map_hours_hint: "vd 11-13, 19-23; trống = lúc nào cũng đăng", post_map_caption_lang: "Ngôn ngữ caption", post_map_caption_lang_hint: "Đội Muse viết thêm caption bằng ngôn ngữ này cho video đăng qua profile này", post_map_check: "Kiểm tra tài khoản", post_map_checking: "Đang kiểm tra (mở profile, không đăng gì)…", post_map_check_at: "Kiểm tra lúc {at}:", post_map_check_fb_ok: "Facebook đúng: quản lý đủ {count} Trang đã map", post_map_check_fb_found: "Facebook: tài khoản quản lý {count} Trang", post_map_check_fb_missing: "Facebook: tài khoản KHÔNG quản lý Trang {ids}", post_map_check_tt_ok: "TikTok đúng: @{account}", post_map_check_tt_found: "TikTok: đang đăng nhập @{account}", post_map_check_tt_bad: "TikTok: đang đăng nhập @{account}, bảng ghi @{expected}", post_map_check_login: "{site}: chưa đăng nhập", post_map_check_error: "{site}: lỗi — {message}", team_post_label: "Đăng video đạt", team_post_off: "Không đăng", team_post_off_explain: "Video đạt chỉ gửi vào topic của Muse như trước.", team_post_ask: "Hỏi trước (nút Đăng)", team_post_ask_explain: "Mỗi video đạt hiện trong General kèm nút 📤 cho từng kênh trong Bảng đăng bài (ghi rõ Trang và TikTok). Bấm nút nào thì video vào hàng đợi đăng của profile đó.", team_post_auto: "Tự động qua kênh mặc định", team_post_auto_explain: "Video đạt tự vào hàng đợi đăng của kênh mặc định; chưa chọn kênh thì bot hỏi như trên.", team_post_profile: "Kênh đăng mặc định", team_post_profile_none: "Chưa chọn (hỏi mỗi lần)", team_post_unmapped: "Profile này chưa có Trang / TikTok trong Bảng đăng bài.", post_map_button: "Bảng đăng bài", post_map_title: "Bảng đăng bài", post_map_sub: "Profile nào đăng lên Trang Facebook nào (theo Page ID) và tài khoản TikTok nào. Lưu vào {path}.", post_map_explain: "Tự động đăng chỉ đăng lên đúng các Trang ghi ở đây (không còn đăng lên mọi Trang tài khoản quản lý) và dừng nếu tài khoản đang đăng nhập ở profile không khớp. Mỗi Page ID / tài khoản TikTok chỉ thuộc 1 profile. Profile tick tự động đăng mà chưa map thì chờ, không đăng gì.", post_map_pages: "Page ID Facebook", post_map_pages_hint: "Nhiều Trang: cách nhau bởi dấu phẩy. Page ID là dãy số asset_id trong link Meta Business Suite.", post_map_tiktok: "Tài khoản TikTok", post_map_tiktok_hint: "@username hoặc link trang TikTok", post_map_known: "Trang tài khoản này quản lý:", post_map_known_none: "Chưa quét Trang: chạy fanpage_post.py --profile <tên> --list-pages.", post_map_auto: "Tự đăng: {targets}", post_map_auto_off: "Không tự đăng", post_map_missing: "Đang tick tự đăng {target} nhưng chưa map: sẽ không đăng.", post_map_saved: "Đã lưu bảng đăng bài.", post_map_none: "Chưa có profile nào.", team_task_lang_label: "Ngôn ngữ giao việc", team_task_lang_explain: "Chỉ huy viết việc giao, tin nhắn và nhận xét chấm cho đội bằng ngôn ngữ này. Muse có ngôn ngữ riêng (phần Ngôn ngữ và ngữ cảnh) nhận việc bằng ngôn ngữ của Muse đó.", team_setup_label: "Ngôn ngữ và ngữ cảnh", team_setup_explain: "Ngôn ngữ: Muse trả lời bằng ngôn ngữ nào. Ngữ cảnh: bộ nhớ dài hạn của Muse (vai trò, bối cảnh, luật, cách làm). Bot gửi cho Muse 1 lần dạng \"Cập nhật bộ nhớ dài hạn\", gửi lại khi bạn sửa hoặc sau khi xoá dữ liệu. Để trống nếu không cần.", team_setup_lang: "Ngôn ngữ", team_setup_context: "Ngữ cảnh (bộ nhớ dài hạn)", team_setup_open: "Ngữ cảnh", team_setup_template: "Mẫu", team_setup_template_pick: "Điền mẫu cho cả đội (chỉ huy: nghiên cứu, phân tích, viết kịch bản chi tiết; thành viên: xây dựng nhân vật và làm video theo kịch bản):", team_setup_replace: "Thay ngữ cảnh đang có của {names} bằng mẫu?", team_setup_chief: "Chỉ huy: {name}", team_setup_too_long: "Ngữ cảnh của {name} dài quá {max} ký tự.",
+    post_map_known_tt: "Đang đăng nhập:", post_map_known_tt_none: "Chưa biết tài khoản: bấm Kiểm tra tài khoản.", post_map_known_yt: "Kênh tài khoản quản lý:", post_map_known_yt_none: "Chưa biết kênh: bấm Kiểm tra tài khoản.", post_map_autofilled: "đã tự điền {targets} từ lần kiểm tra, bấm Lưu để giữ", post_map_check_yt_ok: "YouTube đúng: quản lý @{handle}", post_map_check_yt_found: "YouTube: tài khoản quản lý {count} kênh", post_map_check_filled: "Đã điền vào bảng: {items}", post_map_check_yt_bad: "YouTube: tài khoản không quản lý @{handle}", post_map_tag_on: "tự đăng", post_map_tag_off: "không tự đăng", post_map_filter: "Lọc theo tên profile", post_map_only_ticked: "Chỉ profile đang tự đăng / đã map", post_map_count: "{shown}/{total} profile", post_map_explain_title: "Bảng này dùng thế nào?",
+    post_map_per_day: "Tối đa bài/ngày", post_map_per_day_hint: "0 = không giới hạn; Facebook, TikTok và YouTube tính riêng", post_map_hours: "Khung giờ đăng", post_map_hours_hint: "vd 11-13, 19-23; trống = lúc nào cũng đăng", post_map_caption_lang: "Ngôn ngữ caption", post_map_caption_lang_hint: "Đội Muse viết thêm caption bằng ngôn ngữ này cho video đăng qua profile này", post_map_check: "Kiểm tra tài khoản", post_map_checking: "Đang kiểm tra (mở profile, không đăng gì)…", post_map_check_at: "Kiểm tra lúc {at}:", post_map_check_fb_ok: "Facebook đúng: quản lý đủ {count} Trang đã map", post_map_check_fb_found: "Facebook: tài khoản quản lý {count} Trang", post_map_check_fb_missing: "Facebook: tài khoản KHÔNG quản lý Trang {ids}", post_map_check_tt_ok: "TikTok đúng: @{account}", post_map_check_tt_found: "TikTok: đang đăng nhập @{account}", post_map_check_tt_bad: "TikTok: đang đăng nhập @{account}, bảng ghi @{expected}", post_map_check_login: "{site}: chưa đăng nhập", post_map_check_error: "{site}: lỗi — {message}", team_post_label: "Đăng video đạt", team_post_off: "Không đăng", team_post_off_explain: "Video đạt chỉ gửi vào topic của Muse như trước.", team_post_ask: "Hỏi trước (nút Đăng)", team_post_ask_explain: "Mỗi video đạt hiện trong General kèm nút 📤 cho từng kênh trong Bảng đăng bài (ghi rõ Trang, TikTok và YouTube). Bấm nút nào thì video vào hàng đợi đăng của profile đó.", team_post_auto: "Tự động qua kênh mặc định", team_post_auto_explain: "Video đạt tự vào hàng đợi đăng của kênh mặc định; chưa chọn kênh thì bot hỏi như trên.", team_post_profile: "Kênh đăng mặc định", team_post_profile_none: "Chưa chọn (hỏi mỗi lần)", team_post_unmapped: "Profile này chưa có Trang / TikTok / kênh YouTube trong Bảng đăng bài.", post_map_button: "Bảng đăng bài", post_map_title: "Bảng đăng bài", post_map_sub: "Profile nào đăng lên Trang Facebook nào (theo Page ID), tài khoản TikTok và kênh YouTube nào. Lưu vào {path}.", post_map_explain: "Tự động đăng chỉ đăng lên đúng các Trang ghi ở đây (không còn đăng lên mọi Trang tài khoản quản lý) và dừng nếu tài khoản đang đăng nhập ở profile không khớp. Mỗi Page ID / tài khoản TikTok / kênh YouTube chỉ thuộc 1 profile. Profile tick tự động đăng mà chưa map thì chờ, không đăng gì.", post_map_pages: "Page ID Facebook", post_map_pages_hint: "Nhiều Trang: cách nhau bởi dấu phẩy. Page ID là dãy số asset_id trong link Meta Business Suite.", post_map_tiktok: "Tài khoản TikTok", post_map_tiktok_hint: "@username hoặc link trang TikTok", post_map_youtube: "Kênh YouTube", post_map_youtube_hint: "@handle hoặc link kênh YouTube", post_map_known: "Trang tài khoản này quản lý:", post_map_known_none: "Chưa quét Trang: bấm Kiểm tra tài khoản.", post_map_auto: "Tự đăng: {targets}", post_map_auto_off: "Không tự đăng", post_map_missing: "Đang tick tự đăng {target} nhưng chưa map: sẽ không đăng.", post_map_saved: "Đã lưu bảng đăng bài.", post_map_none: "Chưa có profile nào.", team_task_lang_label: "Ngôn ngữ giao việc", team_task_lang_explain: "Chỉ huy viết việc giao, tin nhắn và nhận xét chấm cho đội bằng ngôn ngữ này. Muse có ngôn ngữ riêng (phần Ngôn ngữ và ngữ cảnh) nhận việc bằng ngôn ngữ của Muse đó.", team_setup_label: "Ngôn ngữ và ngữ cảnh", team_setup_explain: "Ngôn ngữ: Muse trả lời bằng ngôn ngữ nào. Ngữ cảnh: bộ nhớ dài hạn của Muse (vai trò, bối cảnh, luật, cách làm). Bot gửi cho Muse 1 lần dạng \"Cập nhật bộ nhớ dài hạn\", gửi lại khi bạn sửa hoặc sau khi xoá dữ liệu. Để trống nếu không cần.", team_setup_lang: "Ngôn ngữ", team_setup_context: "Ngữ cảnh (bộ nhớ dài hạn)", team_setup_open: "Ngữ cảnh", team_setup_template: "Mẫu", team_setup_template_pick: "Điền mẫu cho cả đội (chỉ huy: nghiên cứu, phân tích, viết kịch bản chi tiết; thành viên: xây dựng nhân vật và làm video theo kịch bản):", team_setup_replace: "Thay ngữ cảnh đang có của {names} bằng mẫu?", team_setup_chief: "Chỉ huy: {name}", team_setup_too_long: "Ngữ cảnh của {name} dài quá {max} ký tự.",
     update_check: "Kiểm tra cập nhật", update_available: "Đã có phiên bản mới của Muse2Tele", update_open: "Xem thay đổi & cập nhật",
     update_title: "Cập nhật Muse2Tele", update_versions: "Đang dùng: {local} → bản mới: {remote} ({date})", update_unknown: "chưa rõ (bản tải ZIP)",
     update_changes: "Có gì mới", update_no_changes: "Không có danh sách thay đổi.",
@@ -542,7 +612,7 @@ const I18N = {
     export_txt: "Export cookies.txt", export_txt_hint: "Netscape: yt-dlp, curl, wget", import: "Import cookies", import_hint: "From a JSON or cookies.txt file",
     reset_fp: "New fingerprint", reset_fp_hint: "Sites see a different device on the next launch", fp_title: "Current fingerprint", no_fp: "No fingerprint yet. It is created on the first launch.",
     fp_platform: "Platform", fp_screen: "Screen", fp_cpu: "CPU",
-    confirm_reset: "Create a new fingerprint for “{name}”? Sites will see a different machine.", close: "Close",
+    confirm_reset: "Create a new fingerprint for “{name}”? Sites will see a different machine.", close: "Close", modal_maximize: "Maximize", modal_restore: "Restore size",
     launching: "Launching {name}...", started: "Started {name}", stopped: "Stopped {name}", created: "Created {name}", saved: "Saved",
     deleted: "Deleted {name}", deleted_n: "Deleted {n} profiles", exported: "Exported {n} cookies", imported: "Imported {n} cookies", fp_reset: "New fingerprint created",
     settings_button: "Download folder", settings_title: "Download folder", settings_sub: "Files downloaded in any profile's browser are saved here. A change applies at once, also to running profiles.",
@@ -555,17 +625,21 @@ const I18N = {
     muse_dir_explain: "Photos, videos and files you send into a Telegram topic are saved here first, then the bot attaches them in Muse. It must be inside one of the upload folders above. The bot reads it when it starts: restart start_bot.bat after changing it.",
     muse_dir_default: "Leave empty for the default: {path}", muse_dir_outside: "This folder is outside the upload folders: FoxProfile will refuse the bot's files.",
     upload_saved: "Upload folders saved. Restart running profiles and the bot to apply.",
-    auto_post_title: "Auto-post", auto_post_fanpage: "Auto-post to Facebook page", auto_post_tiktok: "Auto-post to TikTok",
-    auto_post_hint: "Muse2Tele posts with the accounts already logged in to this profile. Log in to Facebook / TikTok in the profile's browser first.",
+    video_save_label: "Auto-save Muse videos", video_save_on: "Save every video Muse sends to this computer",
+    video_save_explain: "The bot keeps a copy of each video it gets from a Muse chat, also the ones held back from Telegram or too big for it. Each Muse gets its own subfolder, e.g. {example}. Applies at once, no restart needed.",
+    video_save_default: "Leave empty for the default: {path}",
+    auto_post_title: "Auto-post", auto_post_fanpage: "Auto-post to Facebook page", auto_post_tiktok: "Auto-post to TikTok", auto_post_youtube: "Auto-post to YouTube channel",
+    auto_post_hint: "Muse2Tele posts with the accounts already logged in to this profile. Log in to Facebook / TikTok / YouTube in the profile's browser first.",
     auto_post_off: "No auto-post",
-    team_button: "Muse team", team_title: "Muse team", team_sub: "How the Muses in the Telegram group work together. Saved to {path}; the bot applies it at once.",
+    team_button: "Muse team", team_title: "Muse team", team_sub: "Each team works in its own Telegram group. Saved to {path}; the bot applies it at once.",
+    team_tabs: "Muse teams", team_tab_chief: "chief", team_add: "Add team", team_add_prompt: "Name of the new team (each team uses its own Telegram group):", team_add_default: "Team {n}", team_added: "Team {name} created. Add the bot to a new Telegram group (Topics on), send /setup there and pick this team.", team_switch_unsaved: "Drop the unsaved changes of this team?", team_section_group: "Team and Telegram group", team_name_label: "Team name", team_name_missing: "Give the team a name.", team_group_linked: "Working in the Telegram group: {title}", team_group_none: "No Telegram group yet", team_group_none_how: "Team {name} has no Telegram group yet: create a new group, turn Topics on, make the bot an admin (Manage topics), send /setup in the group and pick this team.", team_delete: "Remove team", team_delete_confirm: "Remove team {name}?\n\nIts profiles go back to the default team and the bot stops using its Telegram group. Its tasks, sample videos and scripts are no longer shown.", team_deleted: "Team {name} removed.", team_profiles_label: "Profiles in the team's group", team_profiles_explain: "Tick the profiles of this team: the bot gives each a topic in the team's group. A profile is in one team only; unticked profiles go back to the default team.", team_profiles_default: "The default team gets every profile no other team has (new profiles too). To move a profile to another team, open that team and tick it.", team_section_lead: "Chief, sending tasks and members", skill_label: "Skill (template contexts + settings)", skill_explain: "A skill is a ready-made pack for one kind of work: the chief's context, the members' context, roles and the settings that go with it (e.g. the video workflow). Apply fills the ticked team; edit before saving if needed.", skill_apply: "Apply", skill_reapply: "Fill again", skill_in_use: "in use", skill_free: "free", skill_installed: "installed", skill_tag_video: "video", skill_tag_general: "general", skill_remove: "Remove", skill_remove_confirm: "Remove skill {name} from this computer? Teams using it keep the contexts already filled.", skill_install: "Install skill from file (.json)", skill_installed_ok: "Skill {name} installed.", skill_install_error: "Could not install the skill: {message}", skill_none: "No skill (write contexts by hand)", skill_applied: "Skill {name} filled for: {names}. Press Save to apply.", skill_settings_label: "Settings from the skill", skill_video_on: "Video workflow", skill_video_on_explain: "The bot downloads sample videos from links, checks submitted videos, splits the look stage, takes multi-video / segment tasks, asks for captions and posts passed videos. Video skills turn it on; turn it off for other work (writing, research, images).",
     team_mode_label: "Working mode", team_mode_solo: "Independent", team_mode_solo_explain: "Each Muse works on its own in its topic. You talk to each one directly.",
     team_mode_chief: "With a chief", team_mode_chief_explain: "One Muse leads the team in the group's General topic: it splits your request into tasks, hands them to the other Muses, follows progress and rates their work. You can still talk to any Muse in its topic.",
     team_chief_label: "Chief Muse", team_chief_hint: "Choose a profile", team_chief_note: "Pick a Muse you do not use for other work: its chat is used to lead the team.",
     team_approval_label: "Sending tasks", team_approval_manual: "Approve by hand", team_approval_manual_explain: "Each task the chief writes appears in General with Send / Drop buttons. Nothing reaches a Muse until you press Send.",
     team_approval_auto: "Automatic", team_approval_auto_explain: "Tasks go to the Muses as soon as the chief writes them (redo rounds and tasks per hour are limited below).",
     team_roles_label: "Members and roles", team_roles_explain: "Untick a Muse to leave it out of the team: the chief is not told about it and cannot give it tasks. Each role says what that Muse is good at (e.g. writes video scripts, makes images) so the chief knows who gets each task; leave it empty if it has no fixed role. New profiles join the team.",
-    team_roles_none: "No other profile yet.", team_member_hint: "In the team", team_no_members: "Tick at least one Muse for the chief to lead.", team_chief_missing: "Choose the chief Muse.", team_saved: "Muse team saved. The bot applies it at once.",
+    team_roles_none: "No other profile yet.", team_member_hint: "In the team", team_no_members: "Tick at least one Muse for the chief to lead.", team_chief_missing: "Choose the chief Muse.", team_saved: "Team {name} saved. The bot applies it at once.",
     team_review_label: "Review", team_pass_score: "Pass score (out of 10)", team_pass_score_hint: "Below this score the bot sends the chief's notes back to the Muse for a redo on its own.",
     team_max_rounds: "Redo rounds", team_max_rounds_hint: "Per task (per video). Still failing after that: the bot stops the task and tells you.", team_max_new: "New tasks per hour",
     team_quiet: "Quiet minutes", team_quiet_hint: "A working Muse idle and silent this long without saying it is done gets one reminder, then is reported to the chief.", team_overdue: "Overdue after (minutes)",
@@ -575,7 +649,8 @@ const I18N = {
     team_reset_confirm: "Permanently wipe the Muse data of: {names}?\n\nChats, files, artifacts and the messages in their topics are deleted and cannot be restored. Untick \"Wipe Muse data\" to only save the settings.",
     team_saved_reset: "Muse team saved. The bot is wiping the team's Muse data, then briefs the chief again.", team_full_reset: "Reset team", team_full_reset_hint: "Put every team setting back to its default and wipe the Muses", team_full_reset_confirm: "Reset the whole Muse team?\n\nEvery setting goes back to its default (each Muse on its own, no chief, roles, languages, contexts, posting or review settings).\nThe bot permanently wipes the Muse data (chats, files, artifacts, topic messages) of: {names}, drops every task, sample video and locked script, and moves the locked character sets to an archive folder.\n\nCannot be undone.", team_full_reset_none: "(no Muse)", team_full_reset_done: "Muse team reset to defaults. The bot is wiping the Muse data of: {names}. Set the team up again.", team_number_error: "{label}: enter a whole number from {lo} to {hi}.",
     team_detach_hint: "Take this Muse out of the team", team_detach_explain: "{name} leaves the team now (no need to press Save): the chief stops giving it tasks and is briefed again, its role and team context are dropped, and every open task of {name} is cancelled, the running one too. Tick it again later to bring it back.", team_detach_wipe: "Also wipe its Muse data (chats, files, artifacts, topic messages) so nothing of the team stays in its memory. Cannot be undone. Unticked: the bot tells the Muse it left the team.", team_detach_go: "Take {name} out", team_detach_confirm: "Take {name} out of the team and permanently wipe its Muse data?\n\nChats, files, artifacts and the messages in its topic are deleted and cannot be restored.", team_detach_done: "{name} taken out of the team. The bot cancels its open tasks, tells it it left the team and briefs the chief again.", team_detach_done_wipe: "{name} taken out of the team. The bot cancels its open tasks, wipes its Muse data and briefs the chief again.",
-    post_map_per_day: "Posts per day", post_map_per_day_hint: "0 = no limit; Facebook and TikTok counted apart", post_map_hours: "Posting hours", post_map_hours_hint: "e.g. 11-13, 19-23; empty = any time", post_map_caption_lang: "Caption language", post_map_caption_lang_hint: "The Muse team writes an extra caption in this language for videos posted here", post_map_check: "Check accounts", post_map_checking: "Checking (opens the profile, posts nothing)…", post_map_check_at: "Checked {at}:", post_map_check_fb_ok: "Facebook OK: manages all {count} mapped Pages", post_map_check_fb_found: "Facebook: manages {count} Pages", post_map_check_fb_missing: "Facebook: the account does NOT manage Page(s) {ids}", post_map_check_tt_ok: "TikTok OK: @{account}", post_map_check_tt_found: "TikTok: logged in as @{account}", post_map_check_tt_bad: "TikTok: logged in as @{account}, the map says @{expected}", post_map_check_login: "{site}: not logged in", post_map_check_error: "{site}: error — {message}", team_post_label: "Post passed videos", team_post_off: "Do not post", team_post_off_explain: "Passed videos only go to the Muse's topic, as before.", team_post_ask: "Ask first (Post buttons)", team_post_ask_explain: "Each passed video shows in General with a 📤 button per channel in the Posting map (with its Pages and TikTok). The button you press puts the video in that profile's posting queue.", team_post_auto: "Automatically to the default channel", team_post_auto_explain: "Passed videos go straight into the default channel's posting queue; with no default channel the bot asks as above.", team_post_profile: "Default channel", team_post_profile_none: "None (ask each time)", team_post_unmapped: "This profile has no Page or TikTok in the Posting map yet.", post_map_button: "Posting map", post_map_title: "Posting map", post_map_sub: "Which Facebook Pages (by Page ID) and TikTok account each profile posts to. Saved to {path}.", post_map_explain: "Auto-post only posts to the Pages listed here (never to every Page the account manages) and stops when the account logged in on the profile does not match. A Page ID or TikTok account can belong to one profile only. A profile ticked for auto-post with nothing mapped waits and posts nothing.", post_map_pages: "Facebook Page IDs", post_map_pages_hint: "Several Pages: separate with commas. The Page ID is the asset_id number in Meta Business Suite links.", post_map_tiktok: "TikTok account", post_map_tiktok_hint: "@username or the TikTok profile link", post_map_known: "Pages found on this account:", post_map_known_none: "Pages not scanned yet: run fanpage_post.py --profile <name> --list-pages.", post_map_auto: "Auto-post: {targets}", post_map_auto_off: "Auto-post off", post_map_missing: "Auto-post to {target} is ticked but nothing is mapped: it will not post.", post_map_saved: "Posting map saved.", post_map_none: "No profile yet.", team_task_lang_label: "Task language", team_task_lang_explain: "The chief writes tasks, messages and review notes for the team in this language. A Muse with its own language (under Language and context) gets its tasks in that language.", team_setup_label: "Language and context", team_setup_explain: "Language: what the Muse answers in. Context: its long-term memory (who it is, the story world, rules, how to work). The bot sends it to the Muse once as a long-term memory update, and again when you change it or after a wipe. Leave empty if not needed.", team_setup_lang: "Language", team_setup_context: "Context (long-term memory)", team_setup_open: "Context", team_setup_template: "Template", team_setup_template_pick: "Fill the whole team from a template (chief: research, analysis, detailed scripts; members: characters and videos from the script):", team_setup_replace: "Replace the current context of {names} with the template?", team_setup_chief: "Chief: {name}", team_setup_too_long: "Context of {name} is longer than {max} characters.",
+    post_map_known_tt: "Logged in:", post_map_known_tt_none: "Account unknown: press Check accounts.", post_map_known_yt: "Channels of this account:", post_map_known_yt_none: "Channels unknown: press Check accounts.", post_map_autofilled: "filled {targets} from the last check, press Save to keep", post_map_check_yt_ok: "YouTube OK: manages @{handle}", post_map_check_yt_found: "YouTube: the account manages {count} channels", post_map_check_filled: "Added to the map: {items}", post_map_check_yt_bad: "YouTube: the account does not manage @{handle}", post_map_tag_on: "auto-post", post_map_tag_off: "no auto-post", post_map_filter: "Filter by profile name", post_map_only_ticked: "Only profiles that auto-post / are mapped", post_map_count: "{shown}/{total} profiles", post_map_explain_title: "How does this table work?",
+    post_map_per_day: "Posts per day", post_map_per_day_hint: "0 = no limit; Facebook, TikTok and YouTube counted apart", post_map_hours: "Posting hours", post_map_hours_hint: "e.g. 11-13, 19-23; empty = any time", post_map_caption_lang: "Caption language", post_map_caption_lang_hint: "The Muse team writes an extra caption in this language for videos posted here", post_map_check: "Check accounts", post_map_checking: "Checking (opens the profile, posts nothing)…", post_map_check_at: "Checked {at}:", post_map_check_fb_ok: "Facebook OK: manages all {count} mapped Pages", post_map_check_fb_found: "Facebook: manages {count} Pages", post_map_check_fb_missing: "Facebook: the account does NOT manage Page(s) {ids}", post_map_check_tt_ok: "TikTok OK: @{account}", post_map_check_tt_found: "TikTok: logged in as @{account}", post_map_check_tt_bad: "TikTok: logged in as @{account}, the map says @{expected}", post_map_check_login: "{site}: not logged in", post_map_check_error: "{site}: error — {message}", team_post_label: "Post passed videos", team_post_off: "Do not post", team_post_off_explain: "Passed videos only go to the Muse's topic, as before.", team_post_ask: "Ask first (Post buttons)", team_post_ask_explain: "Each passed video shows in General with a 📤 button per channel in the Posting map (with its Pages, TikTok and YouTube). The button you press puts the video in that profile's posting queue.", team_post_auto: "Automatically to the default channel", team_post_auto_explain: "Passed videos go straight into the default channel's posting queue; with no default channel the bot asks as above.", team_post_profile: "Default channel", team_post_profile_none: "None (ask each time)", team_post_unmapped: "This profile has no Page, TikTok or YouTube channel in the Posting map yet.", post_map_button: "Posting map", post_map_title: "Posting map", post_map_sub: "Which Facebook Pages (by Page ID), TikTok account and YouTube channel each profile posts to. Saved to {path}.", post_map_explain: "Auto-post only posts to the Pages listed here (never to every Page the account manages) and stops when the account logged in on the profile does not match. A Page ID, TikTok account or YouTube channel can belong to one profile only. A profile ticked for auto-post with nothing mapped waits and posts nothing.", post_map_pages: "Facebook Page IDs", post_map_pages_hint: "Several Pages: separate with commas. The Page ID is the asset_id number in Meta Business Suite links.", post_map_tiktok: "TikTok account", post_map_tiktok_hint: "@username or the TikTok profile link", post_map_youtube: "YouTube channel", post_map_youtube_hint: "@handle or the YouTube channel link", post_map_known: "Pages found on this account:", post_map_known_none: "Pages not scanned yet: press Check accounts.", post_map_auto: "Auto-post: {targets}", post_map_auto_off: "Auto-post off", post_map_missing: "Auto-post to {target} is ticked but nothing is mapped: it will not post.", post_map_saved: "Posting map saved.", post_map_none: "No profile yet.", team_task_lang_label: "Task language", team_task_lang_explain: "The chief writes tasks, messages and review notes for the team in this language. A Muse with its own language (under Language and context) gets its tasks in that language.", team_setup_label: "Language and context", team_setup_explain: "Language: what the Muse answers in. Context: its long-term memory (who it is, the story world, rules, how to work). The bot sends it to the Muse once as a long-term memory update, and again when you change it or after a wipe. Leave empty if not needed.", team_setup_lang: "Language", team_setup_context: "Context (long-term memory)", team_setup_open: "Context", team_setup_template: "Template", team_setup_template_pick: "Fill the whole team from a template (chief: research, analysis, detailed scripts; members: characters and videos from the script):", team_setup_replace: "Replace the current context of {names} with the template?", team_setup_chief: "Chief: {name}", team_setup_too_long: "Context of {name} is longer than {max} characters.",
     update_check: "Check for updates", update_available: "A new version of Muse2Tele is available", update_open: "See changes & update",
     update_title: "Update Muse2Tele", update_versions: "Installed: {local} → new: {remote} ({date})", update_unknown: "unknown (ZIP download)",
     update_changes: "What's new", update_no_changes: "No change list available.",
@@ -908,10 +983,25 @@ function modal(build, { wide = false, onDismiss = null } = {}) {
   if (first) first.focus();
   return close;
 }
+// Every dialog gets a maximize / restore button next to Close; the choice is kept for the next dialogs.
 function modalHead(title, sub, close) {
+  const maxBtn = h("button", { type: "button", class: "icon-btn" });
+  const setMax = (on, remember) => {
+    const box = maxBtn.closest(".modal");
+    if (box) box.classList.toggle("max", on);
+    maxBtn.replaceChildren(icon(on ? "min" : "max"));
+    maxBtn.title = t(on ? "modal_restore" : "modal_maximize");
+    maxBtn.setAttribute("aria-label", maxBtn.title);
+    maxBtn.setAttribute("aria-pressed", String(on));
+    if (remember) store.set("foxprofile.modalMax", on ? "1" : null);
+  };
+  maxBtn.onclick = () => setMax(!maxBtn.closest(".modal").classList.contains("max"), true);
+  setMax(false, false);
+  if (store.get("foxprofile.modalMax") === "1") requestAnimationFrame(() => setMax(true, false));
   return h("div", { class: "modal-head" },
     h("div", {}, h("h2", {}, title), sub ? h("p", {}, sub) : null),
-    h("button", { type: "button", class: "icon-btn", title: t("close"), "aria-label": t("close"), onclick: close }, icon("x")));
+    h("div", { class: "head-btns" }, maxBtn,
+      h("button", { type: "button", class: "icon-btn", title: t("close"), "aria-label": t("close"), onclick: close }, icon("x"))));
 }
 function confirmDialog(message, actionLabel, danger = false) {
   return new Promise((resolve) => {
@@ -931,7 +1021,7 @@ function field(label, input, hint) {
 }
 
 function autoPostLine(p) {
-  const on = [p.auto_post_fanpage && "Fanpage", p.auto_post_tiktok && "TikTok"].filter(Boolean);
+  const on = [p.auto_post_fanpage && "Fanpage", p.auto_post_tiktok && "TikTok", p.auto_post_youtube && "YouTube"].filter(Boolean);
   return on.length ? h("span", { class: "ap" }, on.map((x) => h("b", {}, x))) : h("span", { class: "minor" }, t("auto_post_off"));
 }
 
@@ -957,6 +1047,7 @@ function openEditor(p) {
     };
     const [fanpage, fanpageRow] = tick(t("auto_post_fanpage"), p && p.auto_post_fanpage);
     const [tiktok, tiktokRow] = tick(t("auto_post_tiktok"), p && p.auto_post_tiktok);
+    const [youtube, youtubeRow] = tick(t("auto_post_youtube"), p && p.auto_post_youtube);
     const msg = h("div", { class: "msg", role: "status" });
     const geo = h("div");
     const say = (cls, text) => { msg.className = "msg " + cls; msg.textContent = text; };
@@ -984,7 +1075,7 @@ function openEditor(p) {
       if (submitBtn) submitBtn.disabled = true;
       const body = { name: name.value.trim(), os_type: os.value, proxy: proxy.value.trim() || null,
         timezone: tz.value.trim(), locale: loc.value.trim(),
-        auto_post_fanpage: fanpage.checked, auto_post_tiktok: tiktok.checked };
+        auto_post_fanpage: fanpage.checked, auto_post_tiktok: tiktok.checked, auto_post_youtube: youtube.checked };
       if (!p) body.engine = engine.value;
       try {
         if (p) { await api("PATCH", `/profiles/${enc(p.name)}`, body); delete fingerprints[p.name]; toast(t("saved")); }
@@ -1004,12 +1095,12 @@ function openEditor(p) {
         h("div", { class: "field-row" }, field(t("timezone"), tz), field(t("locale"), loc)),
         h("div", { class: "hint", style: "margin-top:6px;font-size:12px;color:var(--ink-3)" }, t("geo_hint")),
         geo,
-        h("div", { class: "box" }, h("div", { class: "box-title" }, t("auto_post_title")), fanpageRow, tiktokRow,
+        h("div", { class: "box" }, h("div", { class: "box-title" }, t("auto_post_title")), fanpageRow, tiktokRow, youtubeRow,
           h("div", { class: "hint" }, t("auto_post_hint")))),
       h("div", { class: "modal-foot" },
         h("button", { type: "button", class: "btn btn-line", onclick: close }, t("cancel")),
         h("button", { class: "btn btn-act" }, p ? t("save") : t("create"))));
-  });
+  }, { wide: true });
 }
 
 function geoLines(r, useLocale) {
@@ -1181,8 +1272,12 @@ async function openSettings() {
 }
 async function openUploadDirs() {
   let cfg;
+  let saving = null;
   try { cfg = await api("GET", "/settings/upload-dirs"); }
   catch (e) { return toast(e.message, true); }
+  if (cfg.bot_installed) {
+    try { saving = await api("GET", "/settings/video-save"); } catch { /* older API: no auto-save section */ }
+  }
   const museDefault = cfg.muse_default_dir;
   modal((close) => {
     const list = h("div");
@@ -1207,6 +1302,16 @@ async function openUploadDirs() {
     };
     cfg.upload_dirs.forEach((d) => addRow(d));
     muse.oninput = sync;
+    const saveOn = h("input", { type: "checkbox", id: "f-videosave-on" });
+    const saveDir = h("input", { id: "f-videosave-dir", class: "data", autocomplete: "off", spellcheck: "false" });
+    if (saving) {
+      saveOn.checked = saving.enabled;
+      saveDir.value = saving.custom ? saving.save_dir : "";
+      saveDir.placeholder = saving.default_dir;
+    }
+    // Example subfolder in the style of the machine's paths: E:\Videos\Downloaded\Muse2\ on Windows
+    const win = saving && /^[A-Za-z]:/.test(saving.save_dir);
+    const example = saving ? (win ? saving.save_dir.replace(/\//g, "\\") : saving.save_dir).replace(/[\\/]+$/, "") + (win ? "\\Muse2\\" : "/Muse2/") : "";
     const msg = h("div", { class: "msg", role: "status" });
     const save = h("button", { class: "btn btn-act", type: "submit" }, t("settings_save"));
     const form = h("form", {
@@ -1215,6 +1320,7 @@ async function openUploadDirs() {
         save.disabled = true; msg.className = "msg"; msg.textContent = "";
         try {
           await api("PUT", "/settings/upload-dirs", { upload_dirs: values(), muse_upload_dir: muse.value.trim() });
+          if (saving) await api("PUT", "/settings/video-save", { enabled: saveOn.checked, save_dir: saveDir.value.trim() });
           close(); toast(t("upload_saved"));
         } catch (err) { msg.className = "msg err"; msg.textContent = err.message; save.disabled = false; }
       },
@@ -1230,27 +1336,90 @@ async function openUploadDirs() {
           h("div", { class: "dir-row" }, muse),
           h("div", { class: "hint data", style: "margin-top:6px;font-size:12px;color:var(--ink-3)" }, t("muse_dir_default", { path: museDefault })),
           outside) : null,
+        saving ? h("div", {},
+          h("div", { class: "sec-title" }, t("video_save_label")),
+          h("p", { class: "explain" }, t("video_save_explain", { example })),
+          h("label", { class: "check" }, saveOn, h("span", {}, t("video_save_on"))),
+          h("div", { class: "dir-row", style: "margin-top:8px" }, saveDir),
+          h("div", { class: "hint data", style: "margin-top:6px;font-size:12px;color:var(--ink-3)" }, t("video_save_default", { path: saving.default_dir }))) : null,
         msg),
       h("div", { class: "modal-foot" }, h("button", { type: "button", class: "btn btn-line", onclick: close }, t("cancel")), save));
     sync();
     return h("div", {}, modalHead(t("upload_title"), t("upload_sub", { path: cfg.env_file }), close), form);
   }, { wide: true });
 }
-async function openTeam() {
+async function openTeam(teamId) {
   let cfg, mapped = {};
-  try { cfg = await api("GET", "/settings/muse-team"); }
+  const q = teamId ? "?team=" + encodeURIComponent(teamId) : "";
+  try { cfg = await api("GET", "/settings/muse-team" + q); }
   catch (e) { return toast(e.message, true); }
   try { mapped = (await api("GET", "/settings/post-map")).profiles || {}; } catch { /* chua co bang dang bai */ }
+  const tq = "?team=" + encodeURIComponent(cfg.id);
   modal((close) => {
+    let dirty = false;
+    // Chuyen doi / them / xoa doi: mo lai hop thoai cho doi do (hoi neu con thay doi chua luu)
+    const go = (id) => { if (dirty && !confirm(t("team_switch_unsaved"))) return; close(); openTeam(id); };
+    const teamNames = Object.fromEntries((cfg.teams || []).map((x) => [x.id, x.name]));
+    const addTeam = async () => {
+      const name = prompt(t("team_add_prompt"), t("team_add_default", { n: (cfg.teams || []).length + 1 }));
+      if (!name || !name.trim()) return;
+      try { const r = await api("POST", "/settings/muse-team/teams", { name: name.trim() }); dirty = false; go(r.id); toast(t("team_added", { name: r.name })); }
+      catch (err) { toast(err.message, true); }
+    };
+    const tabs = h("div", { class: "chips team-tabs", role: "tablist", "aria-label": t("team_tabs") },
+      (cfg.teams || []).map((x) => h("button", { type: "button", role: "tab", "aria-selected": x.id === cfg.id ? "true" : "false",
+        class: x.id === cfg.id ? "active" : "", title: x.group ? t("team_group_linked", { title: x.group_title || x.group }) : t("team_group_none"),
+        onclick: () => { if (x.id !== cfg.id) go(x.id); } },
+        h("span", { class: "dot" + (x.group ? " on" : "") }), x.name, x.mode === "chief" ? " · " + t("team_tab_chief") : "")),
+      h("button", { type: "button", class: "add", onclick: addTeam }, "＋ " + t("team_add")));
+
     const radios = (name, value, opts) => opts.map(([v, label, explain]) => {
       const r = h("input", { type: "radio", name });
       r.value = v; r.checked = v === value;
       return h("label", { class: "opt" }, r, h("div", {}, h("b", {}, label), h("span", {}, explain)));
     });
+    const section = (title, open, ...body) => {
+      const d = h("details", { class: "sec" }, h("summary", {}, title), h("div", { class: "sec-body" }, ...body));
+      d.open = open;
+      return d;
+    };
+    const assigned = cfg.assigned || {};
+    const otherTeam = (n) => assigned[n] && assigned[n] !== cfg.id ? assigned[n] : "";
+
+    // 1. Doi va nhom Telegram
+    const teamName = h("input", { id: "f-team-name", maxlength: 60, autocomplete: "off" });
+    teamName.value = cfg.name || "";
+    const groupNote = cfg.group
+      ? h("div", { class: "note calm" }, icon("check", true), h("span", {}, t("team_group_linked", { title: cfg.group_title || cfg.group })))
+      : h("div", { class: "note" }, icon("alert", true), h("span", {}, t("team_group_none_how", { name: cfg.name })));
+    const delTeam = cfg.is_default ? null : h("button", { type: "button", class: "btn btn-line", onclick: async () => {
+      if (!confirm(t("team_delete_confirm", { name: cfg.name }))) return;
+      try { const r = await api("DELETE", "/settings/muse-team/teams/" + encodeURIComponent(cfg.id)); dirty = false; go(r.id); toast(t("team_deleted", { name: cfg.name })); }
+      catch (err) { toast(err.message, true); }
+    } }, t("team_delete"));
+    // Profile trong nhom: doi mac dinh nhan moi profile chua thuoc doi khac; doi khac tick tung profile
+    const groupBoxes = {};
+    const groupList = h("div", { class: "pgrid" }, cfg.profiles.map((n) => {
+      const box = h("input", { type: "checkbox" });
+      box.checked = cfg.is_default ? !otherTeam(n) : (cfg.team_profiles || []).includes(n);
+      box.disabled = cfg.is_default || !!otherTeam(n);
+      groupBoxes[n] = box;
+      return h("label", { class: "check" + (box.disabled ? " off" : "") }, box, h("span", {}, n),
+        otherTeam(n) ? h("span", { class: "minor" }, " · " + (teamNames[otherTeam(n)] || otherTeam(n))) : null);
+    }));
+    const inGroup = (n) => !!groupBoxes[n] && groupBoxes[n].checked;
+    const teamPart = section(t("team_section_group"), !cfg.group || !cfg.is_default,
+      h("div", { class: "field-row" }, field(t("team_name_label"), teamName), h("div", { class: "field", style: "align-self:end" }, delTeam)),
+      groupNote,
+      h("div", { class: "sec-title" }, t("team_profiles_label")),
+      h("p", { class: "explain" }, t(cfg.is_default ? "team_profiles_default" : "team_profiles_explain")),
+      cfg.profiles.length ? groupList : h("div", { class: "hint" }, t("team_roles_none")));
+
+    // 2. Che do + chi huy
     const names = cfg.profiles.slice();
     if (cfg.chief && !names.includes(cfg.chief)) names.unshift(cfg.chief);
     const chief = h("select", { id: "f-chief" }, h("option", { value: "" }, t("team_chief_hint")),
-      names.map((n) => h("option", { value: n, selected: n === cfg.chief }, n)));
+      names.map((n) => h("option", { value: n, selected: n === cfg.chief, disabled: !!otherTeam(n) }, n + (otherTeam(n) ? " · " + (teamNames[otherTeam(n)] || "") : ""))));
     const roles = {};
     cfg.profiles.forEach((n) => {
       const input = h("input", { maxlength: 300, autocomplete: "off", "aria-label": n });
@@ -1259,24 +1428,24 @@ async function openTeam() {
       box.checked = !(cfg.excluded || []).includes(n);
       const head = h("label", { class: "check" }, box, h("span", {}, n));
       // Tach khoi doi (ap dung ngay, khong can Luu): chi Muse dang trong doi theo cai dat da luu
-      if (cfg.mode !== "chief" || n === cfg.chief || (cfg.excluded || []).includes(n)) {
+      if (cfg.mode !== "chief" || n === cfg.chief || (cfg.excluded || []).includes(n) || !(cfg.group_profiles || []).includes(n)) {
         roles[n] = h("div", { class: "field member" }, head, input);
         return;
       }
       const wipe = h("input", { type: "checkbox" });
-      const go = h("button", { type: "button", class: "btn btn-danger" }, "✂ " + t("team_detach_go", { name: n }));
+      const goCut = h("button", { type: "button", class: "btn btn-danger" }, "✂ " + t("team_detach_go", { name: n }));
       const panel = h("div", { class: "box", style: "display:none;margin-top:8px;border-color:var(--err)" },
         h("p", { style: "margin:0 0 8px;font-size:13px" }, t("team_detach_explain", { name: n })),
         h("label", { class: "opt" }, wipe, h("div", {}, h("span", {}, t("team_detach_wipe")))),
-        h("div", { style: "display:flex;gap:8px;margin-top:8px" }, go,
+        h("div", { style: "display:flex;gap:8px;margin-top:8px" }, goCut,
           h("button", { type: "button", class: "btn btn-line", onclick: () => { panel.style.display = "none"; } }, t("cancel"))));
-      go.addEventListener("click", async () => {
+      goCut.addEventListener("click", async () => {
         if (wipe.checked && !confirm(t("team_detach_confirm", { name: n }))) return;
-        go.disabled = true;
+        goCut.disabled = true;
         try {
-          await api("POST", "/settings/muse-team/detach", { profile: n, wipe: wipe.checked });
+          await api("POST", "/settings/muse-team/detach" + tq, { profile: n, wipe: wipe.checked });
           close(); toast(t(wipe.checked ? "team_detach_done_wipe" : "team_detach_done", { name: n }));
-        } catch (err) { msg.className = "msg err"; msg.textContent = err.message; go.disabled = false; }
+        } catch (err) { msg.className = "msg err"; msg.textContent = err.message; goCut.disabled = false; }
       });
       const cut = h("button", { type: "button", class: "icon-btn danger", title: t("team_detach_hint"), "aria-label": t("team_detach_hint") + ": " + n,
         onclick: () => { panel.style.display = panel.style.display === "none" ? "" : "none"; } }, "✂");
@@ -1284,14 +1453,11 @@ async function openTeam() {
         h("div", { style: "display:flex;align-items:center;gap:6px" }, head, h("span", { style: "flex:1" }), cut), input, panel);
     });
     const rolesBox = h("div");
-    const channels = cfg.profiles.slice();
-    if (cfg.post_profile && !channels.includes(cfg.post_profile)) channels.unshift(cfg.post_profile);
-    const postProfile = h("select", { id: "f-post-profile", style: "max-width:320px" }, h("option", { value: "" }, t("team_post_profile_none")),
-      channels.map((n) => h("option", { value: n, selected: n === cfg.post_profile }, n)));
-    const postNote = h("div", { class: "msg err", style: "margin-top:6px" }, t("team_post_unmapped"));
+    const rolesNone = h("div", { class: "hint" }, t("team_roles_none"));
     const taskLang = h("select", { id: "f-task-lang", style: "max-width:280px" },
       Object.entries(cfg.langs || {}).map(([k, v]) => h("option", { value: k, selected: k === (cfg.task_lang || "") }, v)));
-    // Ngon ngu + ngu canh (bo nho dai han) tung Muse, ca chi huy
+
+    // 3. Ngon ngu + ngu canh (bo nho dai han) tung Muse, ca chi huy
     const MAX_CONTEXT = 6000;
     const setups = {};
     names.forEach((n) => {
@@ -1304,10 +1470,7 @@ async function openTeam() {
       area.value = item.context || "";
       const label = () => { const c = area.value.trim().length; return t("team_setup_open") + (c ? " (" + c + ")" : "") + (area.style.display === "none" ? " ▾" : " ▴"); };
       const open = h("button", { type: "button", class: "btn btn-ghost" });
-      open.addEventListener("click", () => {
-        area.style.display = area.style.display === "none" ? "" : "none";
-        open.textContent = label();
-      });
+      open.addEventListener("click", () => { area.style.display = area.style.display === "none" ? "" : "none"; open.textContent = label(); });
       area.addEventListener("input", () => { open.textContent = label(); autoReset(); });
       open.textContent = label();
       const fill = (text) => { area.value = text; if (!lang.value) lang.value = "vi"; open.textContent = label(); };
@@ -1315,21 +1478,90 @@ async function openTeam() {
         h("div", { style: "display:flex;gap:8px;align-items:center;flex-wrap:wrap" }, lang, open), area) };
     });
     const setupBox = h("div");
-    // Mau ca doi: 1 lan bam dien ngu canh chi huy cho chi huy, ngu canh thanh vien cho moi Muse dang tick (+ vai tro trong)
-    const teamTpl = h("div", { style: "margin-bottom:10px" },
-      h("p", { class: "hint", style: "margin:0 0 6px" }, t("team_setup_template_pick")),
-      h("div", { style: "display:flex;gap:6px;flex-wrap:wrap" }, (cfg.templates || []).map((tp) => h("button", { type: "button", class: "btn btn-line", onclick: () => {
-        const lead = chief.value;
-        const members = Object.entries(roles).filter(([m, el]) => m !== lead && el.querySelector("input[type=checkbox]").checked).map(([m]) => m);
-        const want = [...(lead && setups[lead] ? [[lead, tp.chief]] : []), ...members.filter((m) => setups[m]).map((m) => [m, tp.member])];
-        const busy = want.filter(([m, text]) => { const v = setups[m].area.value.trim(); return v && v !== text.trim(); }).map(([m]) => m);
-        if (busy.length && !confirm(t("team_setup_replace", { names: busy.join(", ") }))) return;
-        want.forEach(([m, text]) => setups[m].fill(text));
-        templateUsed = true; autoReset();
-        members.forEach((m) => { const input = roles[m].querySelector("input:not([type])"); if (tp.member_role && !input.value.trim()) input.value = tp.member_role; });
-      } }, "✨ " + tp.label))));
-    const rolesNone = h("div", { class: "hint" }, t("team_roles_none"));
-    // Thong so duyet ket qua: [khoa, nhan, min, max, goi y]
+
+    // 4. Skill: mau ngu canh + thiet lap di kem (vd quy trinh video). Ap dung = dien ngu canh chi huy / thanh vien,
+    // vai tro con trong va thiet lap video cua skill.
+    let skillId = cfg.skill || "", templateUsed = false;
+    const tick = (checked, label, explain) => {
+      const b = h("input", { type: "checkbox" });
+      b.checked = checked;
+      return [b, h("label", { class: "opt" }, b, h("div", {}, h("b", {}, label), h("span", {}, explain)))];
+    };
+    const [videoOn, videoOnRow] = tick((cfg.features || []).includes("video"), t("skill_video_on"), t("skill_video_on_explain"));
+    const [oneVideo, oneVideoRow] = tick(cfg.one_video, t("team_one_video"), t("team_one_video_explain"));
+    const [showFailed, showFailedRow] = tick(cfg.show_failed_media, t("team_show_failed"), t("team_show_failed_explain"));
+    const channels = cfg.profiles.slice();
+    if (cfg.post_profile && !channels.includes(cfg.post_profile)) channels.unshift(cfg.post_profile);
+    const postProfile = h("select", { id: "f-post-profile", style: "max-width:320px" }, h("option", { value: "" }, t("team_post_profile_none")),
+      channels.map((n) => h("option", { value: n, selected: n === cfg.post_profile }, n)));
+    const postNote = h("div", { class: "msg err", style: "margin-top:6px" }, t("team_post_unmapped"));
+    const videoDetail = h("div", {}, oneVideoRow, showFailedRow,
+      h("div", { class: "sec-title" }, t("team_post_label")),
+      radios("post_mode", cfg.post_mode || "ask", [["off", t("team_post_off"), t("team_post_off_explain")],
+        ["ask", t("team_post_ask"), t("team_post_ask_explain")], ["auto", t("team_post_auto"), t("team_post_auto_explain")]]),
+      field(t("team_post_profile"), postProfile), postNote);
+    const skillGrid = h("div", { class: "skill-grid" });
+    const skillMsg = h("div", { class: "msg", role: "status" });
+    const teamNow = () => { const lead = chief.value;
+      return [lead, Object.entries(roles).filter(([n, el]) => n !== lead && inGroup(n) && el.querySelector("input[type=checkbox]").checked).map(([n]) => n)]; };
+    const applySkill = (tp) => {
+      const [lead, members] = teamNow();
+      const want = [...(lead && setups[lead] ? [[lead, tp.chief]] : []), ...members.filter((m) => setups[m]).map((m) => [m, tp.member])];
+      const busy = want.filter(([m, text]) => { const v = setups[m].area.value.trim(); return v && v !== text.trim(); }).map(([m]) => m);
+      if (busy.length && !confirm(t("team_setup_replace", { names: busy.join(", ") }))) return;
+      want.forEach(([m, text]) => setups[m].fill(text));
+      members.forEach((m) => { const input = roles[m].querySelector("input:not([type])"); if (tp.member_role && !input.value.trim()) input.value = tp.member_role; });
+      const st = tp.settings || {};
+      videoOn.checked = (tp.features || []).includes("video");
+      if ("one_video" in st) oneVideo.checked = !!st.one_video;
+      if ("show_failed_media" in st) showFailed.checked = !!st.show_failed_media;
+      if (st.post_mode) { const r = form.querySelector("input[name=post_mode][value=" + st.post_mode + "]"); if (r) r.checked = true; }
+      templateUsed = tp.id !== cfg.skill || templateUsed;
+      skillId = tp.id; dirty = true;
+      renderSkills(); autoReset(); sync();
+      skillMsg.className = "msg ok"; skillMsg.textContent = t("skill_applied", { name: tp.label, names: want.map(([m]) => m).join(", ") || "-" });
+    };
+    const refreshSkills = async () => { cfg.templates = await api("GET", "/settings/muse-team/skills"); renderSkills(); };
+    const removeSkill = async (tp) => {
+      if (!confirm(t("skill_remove_confirm", { name: tp.label }))) return;
+      try { await api("DELETE", "/settings/muse-team/skills/" + encodeURIComponent(tp.id)); await refreshSkills(); }
+      catch (err) { skillMsg.className = "msg err"; skillMsg.textContent = err.message; }
+    };
+    function renderSkills() {
+      skillGrid.replaceChildren(...(cfg.templates || []).map((tp) => {
+        const on = tp.id === skillId;
+        const tags = [(tp.features || []).includes("video") ? t("skill_tag_video") : t("skill_tag_general"),
+          tp.license && tp.license !== "free" ? tp.license : t("skill_free"), tp.source === "user" ? t("skill_installed") : ""].filter(Boolean);
+        return h("div", { class: "skill" + (on ? " on" : "") },
+          h("div", { class: "skill-top" }, h("b", {}, tp.label), on ? h("span", { class: "pill" }, t("skill_in_use")) : null),
+          h("div", { class: "tags" }, tags.map((x) => h("i", {}, x))),
+          tp.description ? h("p", {}, tp.description) : null,
+          h("div", { class: "skill-foot" },
+            h("span", { class: "minor" }, [tp.author, tp.version ? "v" + tp.version : ""].filter(Boolean).join(" · ")),
+            h("span", { style: "flex:1" }),
+            tp.source === "user" ? h("button", { type: "button", class: "btn btn-ghost", onclick: () => removeSkill(tp) }, t("skill_remove")) : null,
+            h("button", { type: "button", class: "btn " + (on ? "btn-line" : "btn-act"), onclick: () => applySkill(tp) }, on ? t("skill_reapply") : t("skill_apply"))));
+      }));
+    }
+    renderSkills();
+    const skillFile = h("input", { type: "file", accept: ".json,application/json", style: "display:none" });
+    skillFile.addEventListener("change", async () => {
+      const f = skillFile.files[0]; skillFile.value = "";
+      if (!f) return;
+      try {
+        const pack = await api("POST", "/settings/muse-team/skills", JSON.parse(await f.text()));
+        await refreshSkills();
+        skillMsg.className = "msg ok"; skillMsg.textContent = t("skill_installed_ok", { name: pack.label });
+      } catch (err) { skillMsg.className = "msg err"; skillMsg.textContent = t("skill_install_error", { message: err.message }); }
+    });
+    const noSkill = h("button", { type: "button", class: "btn btn-ghost", onclick: () => { skillId = ""; dirty = true; renderSkills(); } }, t("skill_none"));
+    const skillPart = section(t("skill_label"), !cfg.skill,
+      h("p", { class: "explain" }, t("skill_explain")), skillGrid,
+      h("div", { class: "inline-btns" }, h("button", { type: "button", class: "btn btn-line", onclick: () => skillFile.click() }, icon("plus", true), t("skill_install")), noSkill, skillFile),
+      skillMsg,
+      h("div", { class: "box" }, h("div", { class: "box-title" }, t("skill_settings_label")), videoOnRow, videoDetail));
+
+    // 5. Duyet ket qua: [khoa, nhan, min, max, goi y]
     const NUMS = [["pass_score", "team_pass_score", 1, 10, "team_pass_score_hint"], ["max_rounds", "team_max_rounds", 1, 10, "team_max_rounds_hint"],
       ["quiet_minutes", "team_quiet", 1, 60, "team_quiet_hint"], ["overdue_minutes", "team_overdue", 5, 600, ""],
       ["max_new_per_hour", "team_max_new", 1, 200, ""]];
@@ -1339,21 +1571,12 @@ async function openTeam() {
       return [k, i];
     }));
     const numField = ([k, label, , , hint]) => field(t(label), nums[k], hint ? t(hint) : null);
-    const tick = (checked, label, explain) => {
-      const b = h("input", { type: "checkbox" });
-      b.checked = checked;
-      return [b, h("label", { class: "opt" }, b, h("div", {}, h("b", {}, label), h("span", {}, explain)))];
-    };
-    const [oneVideo, oneVideoRow] = tick(cfg.one_video, t("team_one_video"), t("team_one_video_explain"));
-    const [showFailed, showFailedRow] = tick(cfg.show_failed_media, t("team_show_failed"), t("team_show_failed_explain"));
     // Xoa du lieu Muse khi luu: tu tick khi doi ngu canh (chi xoa Muse doi ngu canh); chu tu bam o nay thi thoi tu dong.
-    // Doi mau: bot bo ca viec, video mau, kich ban va cat bo nhan vat cu.
+    // Doi skill: bot bo ca viec, video mau, kich ban va cat bo nhan vat cu.
     const [reset, resetRow] = tick(false, t("team_reset"), t("team_reset_explain"));
     const resetNote = h("div", { class: "hint", style: "margin-top:6px" });
-    let resetManual = false, templateUsed = false;
+    let resetManual = false;
     reset.addEventListener("change", () => { resetManual = true; });
-    const teamNow = () => { const lead = chief.value;
-      return [lead, Object.entries(roles).filter(([n, el]) => n !== lead && el.querySelector("input[type=checkbox]").checked).map(([n]) => n)]; };
     const changedSetup = () => { const [lead, members] = teamNow();
       return [...(lead ? [lead] : []), ...members].filter((n) => setups[n]).filter((n) => {
         const old = (cfg.setup || {})[n] || {};
@@ -1361,48 +1584,45 @@ async function openTeam() {
     function autoReset() {
       const changed = changedSetup(), [lead, members] = teamNow();
       if (!resetManual) reset.checked = changed.length > 0 || templateUsed;
-      const names = (changed.length ? changed : [...(lead ? [lead] : []), ...members]).join(", ") || "-";
-      resetNote.textContent = t("team_reset_who", { names }) + (templateUsed ? " " + t("team_reset_template") : "");
+      const who = (changed.length ? changed : [...(lead ? [lead] : []), ...members]).join(", ") || "-";
+      resetNote.textContent = t("team_reset_who", { names: who }) + (templateUsed ? " " + t("team_reset_template") : "");
       resetNote.style.display = reset.checked ? "" : "none";
     }
     const chiefPart = h("div", {},
-      h("div", { class: "sec-title" }, t("team_chief_label")),
-      chief, h("div", { class: "hint", style: "margin-top:6px;font-size:12px;color:var(--ink-3)" }, t("team_chief_note")),
-      h("div", { class: "sec-title" }, t("team_approval_label")),
-      radios("approval", cfg.approval, [["manual", t("team_approval_manual"), t("team_approval_manual_explain")],
-        ["auto", t("team_approval_auto"), t("team_approval_auto_explain")]]),
-      h("div", { class: "sec-title" }, t("team_task_lang_label")),
-      h("p", { class: "explain" }, t("team_task_lang_explain")), taskLang,
-      h("div", { class: "sec-title" }, t("team_roles_label")),
-      h("p", { class: "explain" }, t("team_roles_explain")), rolesBox, rolesNone,
-      h("div", { class: "sec-title" }, t("team_setup_label")),
-      h("p", { class: "explain" }, t("team_setup_explain")), teamTpl, setupBox,
-      h("div", { class: "sec-title" }, t("team_post_label")),
-      radios("post_mode", cfg.post_mode || "ask", [["off", t("team_post_off"), t("team_post_off_explain")],
-        ["ask", t("team_post_ask"), t("team_post_ask_explain")], ["auto", t("team_post_auto"), t("team_post_auto_explain")]]),
-      field(t("team_post_profile"), postProfile), postNote,
-      h("div", { class: "sec-title" }, t("team_review_label")),
-      h("div", { class: "field-row" }, numField(NUMS[0]), numField(NUMS[1])),
-      h("div", { class: "field-row" }, numField(NUMS[2]), numField(NUMS[3])),
-      h("div", { class: "field-row" }, numField(NUMS[4]), h("div")),
-      oneVideoRow, showFailedRow,
+      section(t("team_section_lead"), true,
+        h("div", { class: "sec-title" }, t("team_chief_label")),
+        chief, h("div", { class: "hint", style: "margin-top:6px;font-size:12px;color:var(--ink-3)" }, t("team_chief_note")),
+        h("div", { class: "sec-title" }, t("team_approval_label")),
+        radios("approval", cfg.approval, [["manual", t("team_approval_manual"), t("team_approval_manual_explain")],
+          ["auto", t("team_approval_auto"), t("team_approval_auto_explain")]]),
+        h("div", { class: "sec-title" }, t("team_roles_label")),
+        h("p", { class: "explain" }, t("team_roles_explain")), rolesBox, rolesNone),
+      skillPart,
+      section(t("team_setup_label"), false,
+        h("p", { class: "explain" }, t("team_setup_explain")),
+        h("div", { class: "sec-title" }, t("team_task_lang_label")),
+        h("p", { class: "explain" }, t("team_task_lang_explain")), taskLang,
+        h("div", { class: "sec-title" }, t("team_setup_context")), setupBox),
+      section(t("team_review_label"), false,
+        h("div", { class: "field-row" }, numField(NUMS[0]), numField(NUMS[1])),
+        h("div", { class: "field-row" }, numField(NUMS[2]), numField(NUMS[3])),
+        h("div", { class: "field-row" }, numField(NUMS[4]), h("div"))),
       h("div", { class: "box" }, resetRow, resetNote));
     const msg = h("div", { class: "msg", role: "status" });
     const save = h("button", { class: "btn btn-act", type: "submit" }, t("settings_save"));
     let form;
     // Reset doi: moi thiet lap ve mac dinh + bot xoa du lieu Muse cua chi huy va ca doi
     const fullReset = h("button", { type: "button", class: "btn btn-line", title: t("team_full_reset_hint"), onclick: async () => {
-      const lead = chief.value;
-      const team = [...(lead ? [lead] : []), ...Object.entries(roles)
-        .filter(([n, el]) => n !== lead && el.querySelector("input[type=checkbox]").checked).map(([n]) => n)];
+      const [lead, members] = teamNow();
+      const team = [...(lead ? [lead] : []), ...members];
       const muses = cfg.muse_profiles || [];
-      const targets = muses.length ? team.filter((n) => muses.includes(n)) : team;
-      const names = targets.join(", ") || t("team_full_reset_none");
-      if (!confirm(t("team_full_reset_confirm", { names }))) return;
+      const targets = muses.length ? team.filter((n) => muses.includes(n) || n === lead) : team;
+      const who = targets.join(", ") || t("team_full_reset_none");
+      if (!confirm(t("team_full_reset_confirm", { names: who }))) return;
       fullReset.disabled = save.disabled = true;
       try {
-        await api("POST", "/settings/muse-team/reset", { profiles: targets });
-        close(); toast(t("team_full_reset_done", { names }));
+        await api("POST", "/settings/muse-team/reset" + tq, { profiles: targets });
+        close(); toast(t("team_full_reset_done", { names: who }));
       } catch (err) { msg.className = "msg err"; msg.textContent = err.message; fullReset.disabled = save.disabled = false; }
     } }, "↺ " + t("team_full_reset"));
     const picked = (name) => { const r = form.querySelector("input[name=" + name + "]:checked"); return r ? r.value : ""; };
@@ -1411,10 +1631,11 @@ async function openTeam() {
         e.preventDefault();
         msg.className = "msg"; msg.textContent = "";
         const mode = picked("mode") || "solo";
+        if (!teamName.value.trim()) { msg.className = "msg err"; msg.textContent = t("team_name_missing"); teamName.focus(); return; }
         if (mode === "chief" && !chief.value) { msg.className = "msg err"; msg.textContent = t("team_chief_missing"); return; }
         const inTeam = (el) => el.querySelector("input[type=checkbox]").checked;
         const excluded = Object.entries(roles).filter(([, el]) => !inTeam(el)).map(([n]) => n);
-        const others = Object.entries(roles).filter(([n]) => n !== chief.value);
+        const others = Object.entries(roles).filter(([n]) => n !== chief.value && inGroup(n));
         if (mode === "chief" && others.length && others.every(([, el]) => !inTeam(el))) {
           msg.className = "msg err"; msg.textContent = t("team_no_members"); return;
         }
@@ -1435,16 +1656,19 @@ async function openTeam() {
           const team = targets.length ? targets : [chief.value, ...others.filter(([, el]) => inTeam(el)).map(([n]) => n)];
           if (!confirm(t("team_reset_confirm", { names: team.join(", ") }) + (templateUsed ? "\n\n" + t("team_reset_template") : ""))) return;
         }
-        const body = { mode, chief: chief.value || null, approval: picked("approval") || "manual", excluded,
+        const body = { name: teamName.value.trim(), mode, chief: chief.value || null, approval: picked("approval") || "manual", excluded,
           roles: Object.fromEntries(Object.entries(roles).map(([n, el]) => [n, el.querySelector("input:not([type])").value])),
-          ...values, one_video: oneVideo.checked, show_failed_media: showFailed.checked, reset_data: wipe, reset_targets: wipe ? targets : null, reset_team_data: wipe && templateUsed, setup, task_lang: taskLang.value,
+          ...values, one_video: oneVideo.checked, show_failed_media: showFailed.checked, reset_data: wipe, reset_targets: wipe ? targets : null,
+          reset_team_data: wipe && templateUsed, setup, task_lang: taskLang.value, skill: skillId, features: videoOn.checked ? ["video"] : [],
           post_mode: picked("post_mode") || "ask", post_profile: postProfile.value };
+        if (!cfg.is_default) body.team_profiles = cfg.profiles.filter((n) => inGroup(n));
         save.disabled = true;
-        try { await api("PUT", "/settings/muse-team", body); close(); toast(t(wipe ? "team_saved_reset" : "team_saved")); }
+        try { await api("PUT", "/settings/muse-team" + tq, body); close(); toast(t(wipe ? "team_saved_reset" : "team_saved", { name: body.name })); }
         catch (err) { msg.className = "msg err"; msg.textContent = err.message; save.disabled = false; }
       },
     },
       h("div", { class: "modal-body" },
+        tabs, teamPart,
         h("div", { class: "sec-title" }, t("team_mode_label")),
         radios("mode", cfg.mode, [["solo", t("team_mode_solo"), t("team_mode_solo_explain")],
           ["chief", t("team_mode_chief"), t("team_mode_chief_explain")]]),
@@ -1453,41 +1677,55 @@ async function openTeam() {
         h("button", { type: "button", class: "btn btn-line", onclick: close }, t("cancel")), save));
     const sync = () => {
       chiefPart.style.display = picked("mode") === "chief" ? "" : "none";
+      videoDetail.style.display = videoOn.checked ? "" : "none";
       const ch = mapped[postProfile.value] || {};
-      postNote.style.display = postProfile.value && !((ch.fanpages || []).length || ch.tiktok) ? "" : "none";
-      const shown = Object.entries(roles).filter(([n]) => n !== chief.value).map(([, el]) => el);
+      postNote.style.display = postProfile.value && !((ch.fanpages || []).length || ch.tiktok || ch.youtube) ? "" : "none";
+      const shown = Object.entries(roles).filter(([n]) => n !== chief.value && inGroup(n)).map(([, el]) => el);
       shown.forEach((el) => { el.querySelector("input:not([type])").disabled = !el.querySelector("input[type=checkbox]").checked; });
       rolesBox.replaceChildren(...shown);
       rolesNone.style.display = shown.length ? "none" : "";
       const lead = chief.value;
       const members = [...(setups[lead] ? [lead] : []), ...Object.entries(roles)
-        .filter(([n, el]) => n !== lead && setups[n] && el.querySelector("input[type=checkbox]").checked).map(([n]) => n)];
+        .filter(([n, el]) => n !== lead && inGroup(n) && setups[n] && el.querySelector("input[type=checkbox]").checked).map(([n]) => n)];
       members.forEach((n) => { setups[n].head.textContent = n === lead ? t("team_setup_chief", { name: n }) : n; });
       setupBox.replaceChildren(...members.map((n) => setups[n].box));
       autoReset();
     };
-    form.addEventListener("change", sync);
+    form.addEventListener("change", () => { dirty = true; sync(); });
+    form.addEventListener("input", () => { dirty = true; });
+    // chon chi huy o doi khong mac dinh: chi huy tu vao nhom cua doi
+    chief.addEventListener("change", () => { if (!cfg.is_default && chief.value && groupBoxes[chief.value] && !groupBoxes[chief.value].disabled) groupBoxes[chief.value].checked = true; sync(); });
     sync();
-    return h("div", {}, modalHead(t("team_title"), t("team_sub", { path: cfg.file }), close), form);
+    return h("div", {}, modalHead(t("team_title"), t("team_sub", { path: cfg.file }), () => { if (!dirty || confirm(t("team_switch_unsaved"))) close(); }), form);
   }, { wide: true });
 }
 // Ket qua "Kiem tra tai khoan" (social_post/check_accounts.py) -> [[ok, chu]]
+// Account check result, split per platform: {head: [[ok, text]], fb: [...], tt: [...], yt: [...]}
 function checkLines(c) {
-  if (!c) return [];
-  if (c.running) return [[true, t("post_map_checking")]];
-  const out = [[true, t("post_map_check_at", { at: c.at || "" })]];
-  if (c.error) out.push([false, t("post_map_check_error", { site: "Check", message: c.error })]);
-  const fb = c.fanpage || {}, tt = c.tiktok || {};
-  [["Facebook", fb], ["TikTok", tt]].forEach(([site, part]) => {
-    if (part.status === "not_logged_in") out.push([false, t("post_map_check_login", { site })]);
-    else if (part.status === "error" || part.status === "fox_unavailable") out.push([false, t("post_map_check_error", { site, message: part.message || "" })]);
-  });
-  if (fb.status === "ok") out.push([true, (fb.mapped || []).length ? t("post_map_check_fb_ok", { count: fb.mapped.length }) : t("post_map_check_fb_found", { count: (fb.found || []).length })]);
-  else if (fb.status === "mismatch") out.push([false, t("post_map_check_fb_missing", { ids: (fb.missing || []).join(", ") })]);
-  if (tt.status === "ok") out.push([true, t("post_map_check_tt_ok", { account: tt.account })]);
-  else if (tt.status === "found") out.push([true, t("post_map_check_tt_found", { account: tt.account })]);
-  else if (tt.status === "mismatch") out.push([false, t("post_map_check_tt_bad", { account: tt.account, expected: tt.expected })]);
+  const out = { head: [], fb: [], tt: [], yt: [] };
+  if (!c) return out;
+  if (c.running) { out.head.push([true, t("post_map_checking")]); return out; }
+  out.head.push([true, t("post_map_check_at", { at: c.at || "" })]);
+  if (c.error) out.head.push([false, t("post_map_check_error", { site: "Check", message: c.error })]);
+  if ((c.filled || []).length) out.head.push([true, t("post_map_check_filled", { items: c.filled.join(", ") })]);
+  const fb = c.fanpage || {}, tt = c.tiktok || {}, yt = c.youtube || {};
+  const failed = (key, site, part) => {
+    if (part.status === "not_logged_in") out[key].push([false, t("post_map_check_login", { site })]);
+    else if (part.status === "error" || part.status === "fox_unavailable") out[key].push([false, t("post_map_check_error", { site, message: part.message || "" })]);
+  };
+  failed("fb", "Facebook", fb); failed("tt", "TikTok", tt); failed("yt", "YouTube", yt);
+  if (fb.status === "ok") out.fb.push([true, (fb.mapped || []).length ? t("post_map_check_fb_ok", { count: fb.mapped.length }) : t("post_map_check_fb_found", { count: (fb.found || []).length })]);
+  else if (fb.status === "mismatch") out.fb.push([false, t("post_map_check_fb_missing", { ids: (fb.missing || []).join(", ") })]);
+  if (tt.status === "ok") out.tt.push([true, t("post_map_check_tt_ok", { account: tt.account })]);
+  else if (tt.status === "found") out.tt.push([true, t("post_map_check_tt_found", { account: tt.account })]);
+  else if (tt.status === "mismatch") out.tt.push([false, t("post_map_check_tt_bad", { account: tt.account, expected: tt.expected })]);
+  if (yt.status === "ok") out.yt.push([true, t("post_map_check_yt_ok", { handle: yt.expected })]);
+  else if (yt.status === "found") out.yt.push([true, t("post_map_check_yt_found", { count: (yt.channels || []).length })]);
+  else if (yt.status === "mismatch") out.yt.push([false, yt.message || t("post_map_check_yt_bad", { handle: yt.expected })]);
   return out;
+}
+function checkNodes(lines) {
+  return lines.map(([ok, text]) => h("div", { class: "pm-line" + (ok ? "" : " bad") }, (ok ? "✓ " : "✗ ") + text));
 }
 async function openPostMap() {
   let cfg;
@@ -1495,75 +1733,135 @@ async function openPostMap() {
   catch (e) { return toast(e.message, true); }
   const splitIds = (v) => [...new Set(v.split(/[\s,;]+/).map((x) => { const m = x.match(/[?&](?:id|asset_id)=(\d+)/); return m ? m[1] : x.trim(); }).filter(Boolean))];
   const handle = (v) => { const m = v.match(/tiktok\.com\/@([^/?#\s]+)/); return (m ? m[1] : v).trim().replace(/^@/, ""); };
+  const ytHandle = (v) => { const m = v.match(/youtube\.com\/@([^/?#\s]+)/i); return (m ? m[1] : v).trim().replace(/^@/, ""); };
+  const ticked = (r) => r.auto_post_fanpage || r.auto_post_tiktok || r.auto_post_youtube;
+  // Profiles that auto-post (or are already mapped) first, then the rest by name
+  const mappedRow = (r) => { const e = cfg.profiles[r.name]; return !!e && ((e.fanpages || []).length || e.tiktok || e.youtube); };
+  const sorted = [...cfg.rows].sort((a, b) => (ticked(b) || mappedRow(b)) - (ticked(a) || mappedRow(a)) || a.name.localeCompare(b.name));
   modal((close) => {
     const rows = {};
-    const list = cfg.rows.map((r) => {
-      const entry = cfg.profiles[r.name] || { fanpages: [], tiktok: "" };
+    const chip = (label, onclick, title) => h("button", { type: "button", class: "pm-chip", title: title || label, onclick }, label);
+    const cards = sorted.map((r) => {
+      const entry = cfg.profiles[r.name] || { fanpages: [], tiktok: "", youtube: "" };
       const pages = h("input", { autocomplete: "off", "aria-label": t("post_map_pages") + ": " + r.name, placeholder: "1234567890, 9876543210", class: "data" });
-      pages.value = entry.fanpages.map((p) => p.id).join(", ");
+      pages.value = (entry.fanpages || []).map((p) => p.id).join(", ");
       const tiktok = h("input", { autocomplete: "off", "aria-label": t("post_map_tiktok") + ": " + r.name, placeholder: "@username" });
       tiktok.value = entry.tiktok ? "@" + entry.tiktok : "";
+      const youtube = h("input", { autocomplete: "off", "aria-label": t("post_map_youtube") + ": " + r.name, placeholder: "@handle" });
+      youtube.value = entry.youtube ? "@" + entry.youtube : "";
       const perDay = h("input", { type: "number", min: 0, max: 100, step: 1, class: "data", "aria-label": t("post_map_per_day") + ": " + r.name });
       perDay.value = entry.max_per_day || 0;
       const hours = h("input", { autocomplete: "off", placeholder: "11-13, 19-23", "aria-label": t("post_map_hours") + ": " + r.name });
       hours.value = entry.hours || "";
       const capLang = h("select", { "aria-label": t("post_map_caption_lang") + ": " + r.name },
         Object.entries(cfg.langs || {}).map(([k, v]) => h("option", { value: k, selected: k === (entry.caption_lang || "") }, v)));
-      const checkBox = h("div", { style: "margin-top:6px;font-size:12px" });
-      const showCheck = (c) => checkBox.replaceChildren(...checkLines(c).map(([ok, text]) =>
-        h("div", { style: "color:" + (ok ? "var(--ink-2)" : "var(--err)") }, (ok ? "✓ " : "✗ ") + text)));
-      showCheck(r.check);
+
+      // Per platform: suggestions from the last scan / check + that platform's check result
+      const sugg = { fb: h("div", { class: "pm-sugg" }), tt: h("div", { class: "pm-sugg" }), yt: h("div", { class: "pm-sugg" }) };
+      const res = { fb: h("div"), tt: h("div"), yt: h("div") };
+      const head = h("div", { class: "pm-head-check" });
+      const filled = h("span", { class: "pm-filled" });
+      const warn = h("div", { class: "msg err", style: "margin-top:8px" });
+      const check = () => {
+        const miss = [r.auto_post_fanpage && !splitIds(pages.value).length && "Fanpage", r.auto_post_tiktok && !handle(tiktok.value) && "TikTok",
+          r.auto_post_youtube && !ytHandle(youtube.value) && "YouTube"].filter(Boolean);
+        warn.textContent = miss.length ? t("post_map_missing", { target: miss.join(" / ") }) : "";
+        warn.style.display = miss.length ? "" : "none";
+      };
+      const showKnown = (row) => {
+        const kp = row.known_pages || [], kt = row.known_tiktok || "", ky = row.known_youtube || [];
+        sugg.fb.replaceChildren(h("span", { class: "pm-sugg-label" }, kp.length ? t("post_map_known") : t("post_map_known_none")),
+          ...kp.map((k) => chip("+ " + (k.name || k.id), () => { const ids = splitIds(pages.value); if (!ids.includes(k.id)) pages.value = [...ids, k.id].join(", "); check(); }, k.id)));
+        sugg.tt.replaceChildren(h("span", { class: "pm-sugg-label" }, kt ? t("post_map_known_tt") : t("post_map_known_tt_none")),
+          ...(kt ? [chip("@" + kt, () => { tiktok.value = "@" + kt; check(); })] : []));
+        sugg.yt.replaceChildren(h("span", { class: "pm-sugg-label" }, ky.length ? t("post_map_known_yt") : t("post_map_known_yt_none")),
+          ...ky.map((c) => chip((c.name || c.handle) + " · @" + c.handle, () => { youtube.value = "@" + c.handle; check(); })));
+        // Empty field + exactly one known account: fill it (saved only when the owner presses Save)
+        const auto = [];
+        if (!tiktok.value.trim() && kt && r.auto_post_tiktok) { tiktok.value = "@" + kt; auto.push("TikTok"); }
+        if (!youtube.value.trim() && ky.length === 1 && r.auto_post_youtube) { youtube.value = "@" + ky[0].handle; auto.push("YouTube"); }
+        if (auto.length) filled.textContent = t("post_map_autofilled", { targets: auto.join(", ") });
+        check();
+      };
+      const showCheck = (c) => {
+        const lines = checkLines(c);
+        head.replaceChildren(...checkNodes(lines.head));
+        res.fb.replaceChildren(...checkNodes(lines.fb)); res.tt.replaceChildren(...checkNodes(lines.tt)); res.yt.replaceChildren(...checkNodes(lines.yt));
+      };
+      showKnown(r); showCheck(r.check);
       const poll = () => setTimeout(async () => {
-        if (!document.body.contains(checkBox)) return;
+        if (!document.body.contains(head)) return;
         try {
           const now = await api("GET", "/settings/post-map");
           const row = now.rows.find((x) => x.name === r.name);
           showCheck(row && row.check);
-          if (row && row.check && row.check.running) poll();
+          if (row && row.check && row.check.running) { poll(); return; }
+          // The check may have written empty slots into the map: show them, so Save does not blank them again
+          const e = (now.profiles || {})[r.name] || {};
+          if (!pages.value.trim() && (e.fanpages || []).length) pages.value = e.fanpages.map((p) => p.id).join(", ");
+          if (!tiktok.value.trim() && e.tiktok) tiktok.value = "@" + e.tiktok;
+          if (!youtube.value.trim() && e.youtube) youtube.value = "@" + e.youtube;
+          if (row) showKnown(row);
         } catch { poll(); }
       }, 3000);
       if (r.check && r.check.running) poll();
-      const checkBtn = h("button", { type: "button", class: "btn btn-line", style: "height:30px;padding:0 10px;font-size:12px;margin-left:auto", onclick: async () => {
+      const checkBtn = h("button", { type: "button", class: "btn btn-line pm-check", onclick: async () => {
         try { const out = await api("POST", "/settings/post-map/check/" + encodeURIComponent(r.name)); showCheck((out.rows.find((x) => x.name === r.name) || {}).check); poll(); }
         catch (err) { showCheck({ running: false, at: "", error: err.message }); }
-      } }, t("post_map_check"));
-      const warn = h("div", { class: "msg err", style: "margin-top:6px" });
-      const check = () => {
-        const miss = [r.auto_post_fanpage && !splitIds(pages.value).length && "Fanpage", r.auto_post_tiktok && !handle(tiktok.value) && "TikTok"].filter(Boolean);
-        warn.textContent = miss.length ? t("post_map_missing", { target: miss.join(" / ") }) : "";
-        warn.style.display = miss.length ? "" : "none";
-      };
-      pages.addEventListener("input", check); tiktok.addEventListener("input", check); check();
-      const known = h("div", { class: "hint", style: "display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px" },
-        h("span", {}, r.known_pages.length ? t("post_map_known") : t("post_map_known_none")),
-        r.known_pages.map((k) => h("button", { type: "button", class: "btn btn-line", style: "height:28px;padding:0 10px;font-size:12px", onclick: () => {
-          const ids = splitIds(pages.value); if (!ids.includes(k.id)) pages.value = [...ids, k.id].join(", "); check();
-        } }, "+ " + (k.name || k.id) + " (" + k.id + ")")));
-      const targets = [r.auto_post_fanpage && "Fanpage", r.auto_post_tiktok && "TikTok"].filter(Boolean);
-      rows[r.name] = { pages, tiktok, perDay, hours, capLang };
-      return h("div", { class: "box" },
-        h("div", { style: "display:flex;gap:10px;align-items:center;flex-wrap:wrap" }, h("b", {}, r.name),
-          h("span", { class: "hint", style: "margin:0" }, targets.length ? t("post_map_auto", { targets: targets.join(", ") }) : t("post_map_auto_off")), checkBtn),
-        h("div", { class: "field-row", style: "margin-top:8px" }, field(t("post_map_pages"), pages, t("post_map_pages_hint")), field(t("post_map_tiktok"), tiktok, t("post_map_tiktok_hint"))),
-        h("div", { class: "field-row", style: "grid-template-columns:repeat(auto-fit,minmax(150px,1fr))" }, field(t("post_map_per_day"), perDay, t("post_map_per_day_hint")), field(t("post_map_hours"), hours, t("post_map_hours_hint")),
+      } }, icon("reload", true), t("post_map_check"));
+      [pages, tiktok, youtube].forEach((i) => i.addEventListener("input", check));
+
+      const plat = (name, on, label, input, hint, key) => h("div", { class: "pm-plat" + (on ? " on" : "") },
+        h("div", { class: "pm-plat-head" }, h("b", {}, name), h("span", { class: "pm-tag" }, on ? t("post_map_tag_on") : t("post_map_tag_off"))),
+        field(label, input, hint), sugg[key], res[key]);
+      rows[r.name] = { pages, tiktok, youtube, perDay, hours, capLang };
+      const card = h("div", { class: "pm-card" + (ticked(r) ? "" : " idle") },
+        h("div", { class: "pm-card-head" }, h("b", { class: "pm-name" }, r.name), filled, checkBtn),
+        head,
+        h("div", { class: "pm-grid" },
+          plat("Facebook", r.auto_post_fanpage, t("post_map_pages"), pages, t("post_map_pages_hint"), "fb"),
+          plat("TikTok", r.auto_post_tiktok, t("post_map_tiktok"), tiktok, t("post_map_tiktok_hint"), "tt"),
+          plat("YouTube", r.auto_post_youtube, t("post_map_youtube"), youtube, t("post_map_youtube_hint"), "yt")),
+        h("div", { class: "pm-grid pm-opts" }, field(t("post_map_per_day"), perDay, t("post_map_per_day_hint")), field(t("post_map_hours"), hours, t("post_map_hours_hint")),
           field(t("post_map_caption_lang"), capLang, t("post_map_caption_lang_hint"))),
-        known, warn, checkBox);
+        warn);
+      card.dataset.name = r.name.toLowerCase();
+      card.dataset.ticked = ticked(r) || mappedRow(r) ? "1" : "";
+      return card;
     });
+
+    // Toolbar: filter by name, show only profiles that auto-post / are mapped
+    const anyTicked = cards.some((c) => c.dataset.ticked);
+    const search = h("input", { type: "search", placeholder: t("post_map_filter"), autocomplete: "off", "aria-label": t("post_map_filter") });
+    const onlyBox = h("input", { type: "checkbox" }); onlyBox.checked = anyTicked;
+    const count = h("span", { class: "hint", style: "margin:0" });
+    const apply = () => {
+      const q = search.value.trim().toLowerCase();
+      let shown = 0;
+      cards.forEach((c) => { const ok = (!q || c.dataset.name.includes(q)) && (!onlyBox.checked || c.dataset.ticked); c.style.display = ok ? "" : "none"; if (ok) shown++; });
+      count.textContent = t("post_map_count", { shown, total: cards.length });
+    };
+    search.oninput = apply; onlyBox.onchange = apply; apply();
+    const toolbar = h("div", { class: "pm-toolbar" }, search,
+      h("label", { class: "check", style: "margin:0" }, onlyBox, h("span", {}, t("post_map_only_ticked"))), count);
+
     const msg = h("div", { class: "msg", role: "status" });
     const save = h("button", { class: "btn btn-act", type: "submit" }, t("settings_save"));
     const form = h("form", {
       onsubmit: async (e) => {
         e.preventDefault();
         msg.className = "msg"; msg.textContent = "";
-        const profiles = Object.fromEntries(Object.entries(rows).map(([n, r]) => [n, { fanpages: splitIds(r.pages.value), tiktok: handle(r.tiktok.value),
+        const profiles = Object.fromEntries(Object.entries(rows).map(([n, r]) => [n, { fanpages: splitIds(r.pages.value), tiktok: handle(r.tiktok.value), youtube: ytHandle(r.youtube.value),
           max_per_day: Number(r.perDay.value) || 0, hours: r.hours.value.trim(), caption_lang: r.capLang.value }]));
         save.disabled = true;
         try { await api("PUT", "/settings/post-map", { profiles }); close(); toast(t("post_map_saved")); }
         catch (err) { msg.className = "msg err"; msg.textContent = err.message; save.disabled = false; }
       },
     },
-      h("div", { class: "modal-body" }, h("p", { class: "explain" }, t("post_map_explain")),
-        list.length ? list : h("div", { class: "hint" }, t("post_map_none")), msg),
+      h("div", { class: "modal-body" },
+        h("details", { class: "pm-explain" }, h("summary", {}, t("post_map_explain_title")), h("p", { class: "explain" }, t("post_map_explain"))),
+        cards.length ? toolbar : null,
+        cards.length ? cards : h("div", { class: "hint" }, t("post_map_none")), msg),
       h("div", { class: "modal-foot" }, h("button", { type: "button", class: "btn btn-line", onclick: close }, t("cancel")), save));
     return h("div", {}, modalHead(t("post_map_title"), t("post_map_sub", { path: cfg.file }), close), form);
   }, { wide: true });
@@ -1779,7 +2077,7 @@ $("new-btn").onclick = () => openEditor(null);
 $("settings-btn").onclick = openSettings;
 $("upload-btn").onclick = openUploadDirs;
 $("update-btn").onclick = checkUpdateNow;
-$("team-btn").onclick = openTeam;
+$("team-btn").onclick = () => openTeam();
 $("post-map-btn").onclick = openPostMap;
 $("mcp-btn").onclick = openMcpGuide;
 $("search").oninput = render;

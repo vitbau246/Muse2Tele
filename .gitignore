@@ -12,6 +12,8 @@ muse_telebot/muse_users.db
 muse_telebot/muse_sync.json
 muse_telebot/muse_telebot_state.json
 muse_telebot/muse_team.json
+# Skill pack chu bot tu cai (dashboard -> Doi Muse -> Cai skill tu file)
+muse_telebot/skills/
 *.db
 *.sqlite
 *.sqlite3
@@ -35,3 +37,5 @@ social_post/logs/
 
 # Tu cap nhat: trang thai, nhat ky, sao luu file code cu
 .update/
+# Anh chup loi khi debug script dang bai
+social_post/error_*.png
