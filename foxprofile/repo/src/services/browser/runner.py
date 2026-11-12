@@ -164,6 +164,10 @@ async def run_browser(
         "block_images": False,
         "user_data_dir": profile_dir,
         "persistent_context": True,
+        # Windows: Firefox stops painting a window covered by other windows. Each Camoufox tab is its own window,
+        # so a tab behind the user's apps never settles and every real click / type through the API waits until it
+        # times out (2026-11-12, Business Suite under VS Code: 'Locator.click: Timeout 45000ms' on every attempt).
+        "firefox_user_prefs": {"widget.windows.window_occlusion_tracking.enabled": False},
         **geo_overrides(timezone, locale),
     }
 

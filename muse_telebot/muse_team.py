@@ -9,6 +9,9 @@ Cai dat: dashboard FoxProfile -> Doi Muse, luu muse_team.json canh file nay. Bot
      "overdue_minutes": 30, "one_video": true, "show_failed_media": false, "reset_id": "<ma>",
      "setup": {"<profile>": {"lang": "vi", "context": "<bo nho dai han>"}}}
 Doi = cac profile co topic, tru chi huy va cac profile trong "excluded".
+Nhieu doi (ban 2): {"version": 2, "teams": [{"id", "name", "default", "profiles", "skill", "features",
+...cai dat tren...}]}: moi doi 1 nhom Telegram (bot gan bang /setup trong nhom). features ["video"] (tu skill pack)
+bat quy trinh video (video mau, do ky thuat, buoc tao hinh, viec nhieu video / doan, caption, dang video dat).
 setup: ngon ngu tra loi + ngu canh (bo nho dai han) tung Muse, ca chi huy. Bot gui cho Muse 1 lan ("Cap nhat bo nho
 dai han"), gui lai khi chu sua hoac sau khi xoa du lieu Muse; viec moi chi gui cho Muse da nhan thiet lap.
 reset_id: dashboard dat ma moi khi chu tick "Xoa du lieu Muse" luc luu -> bot reset Muse cua chi huy + ca doi 1 lan.
@@ -50,6 +53,8 @@ kem anh ghep khung hinh ket qua (moi o 1 giay) + anh tao hinh de chi huy so tung
 o canh gian du / canh xa; chi huy van cham 9/10 vi chi xem video.)
 """
 
+import contextlib
+import contextvars
 import json
 import re
 import time
@@ -129,26 +134,111 @@ def _setup(raw):
     return out
 
 
-def config():
-    """Cai dat doi Muse. mode "chief" chi khi co ten chi huy."""
+# ---------- nhieu doi: moi doi 1 nhom Telegram ----------
+# muse_team.json ban 2: {"version": 2, "teams": [{"id", "name", "default", "profiles", ...cai dat doi...}]}; file ban cu
+# (cai dat 1 doi o cap ngoai cung) = doi mac dinh "default". Doi mac dinh nhan moi profile khong doi nao khac liet ke.
+# Doi dang xu ly = TEAM (contextvar): bot dat khi nhan tin tu 1 nhom, khi chay viec cua 1 profile, trong vong dieu phoi.
+DEFAULT_TEAM = "default"
+TEAM = contextvars.ContextVar("muse_team", default=None)
+
+
+def _read():
     try:
         raw = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         raw = {}
-    if not isinstance(raw, dict):
-        raw = {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def raw_teams():
+    """Cac doi (dict tho), luon co dung 1 doi mac dinh (dau tien neu file khong ghi)."""
+    raw = _read()
+    if isinstance(raw.get("teams"), list):
+        teams = [dict(t) for t in raw["teams"] if isinstance(t, dict) and str(t.get("id") or "").strip()]
+    elif raw:  # ban 1 doi: dang chay quy trinh video
+        teams = [{**raw, "id": DEFAULT_TEAM, "name": "Đội 1", "default": True, "profiles": None,
+                  "features": raw.get("features", ["video"])}]
+    else:
+        teams = []
+    unique = {}
+    for t in teams:
+        unique.setdefault(str(t["id"]).strip(), t)
+    teams = list(unique.values()) or [{"id": DEFAULT_TEAM, "name": "Đội 1", "default": True, "profiles": None}]
+    lead = next((t for t in teams if t.get("default")), teams[0])
+    for t in teams:
+        t["id"] = str(t["id"]).strip()
+        t["default"] = t is lead
+        t["profiles"] = None if t["default"] else [str(x).strip() for x in (t.get("profiles") or [])
+                                                    if isinstance(t.get("profiles"), list) and str(x).strip()]
+    return teams
+
+
+def team_ids():
+    return [t["id"] for t in raw_teams()]
+
+
+def default_team():
+    return next(t["id"] for t in raw_teams() if t["default"])
+
+
+def current_team():
+    """Doi dang xu ly; chua dat (hoac doi da bi xoa) thi doi mac dinh."""
+    tid, teams = TEAM.get(), raw_teams()
+    return tid if tid and any(t["id"] == tid for t in teams) else next(t["id"] for t in teams if t["default"])
+
+
+@contextlib.contextmanager
+def in_team(tid):
+    token = TEAM.set(tid or None)
+    try:
+        yield
+    finally:
+        TEAM.reset(token)
+
+
+def assigned(teams=None):
+    """profile -> doi liet ke profile do (tru doi mac dinh)."""
+    out = {}
+    for t in teams or raw_teams():
+        for name in t.get("profiles") or []:
+            out.setdefault(name, t["id"])
+    return out
+
+
+def group_profiles(all_profiles, tid=None):
+    """Profile thuoc nhom cua doi: danh sach cua doi; doi mac dinh = moi profile khong doi nao khac liet ke. Chi huy
+    luon thuoc doi cua no."""
+    teams = raw_teams()
+    tid = tid or current_team()
+    team = next(t for t in teams if t["id"] == tid)
+    if team["profiles"] is not None:
+        return [p for p in all_profiles if p in team["profiles"]]
+    taken = assigned(teams)
+    return [p for p in all_profiles if p not in taken]
+
+
+def config(tid=None):
+    """Cai dat cua doi dang xu ly (hoac doi tid). mode "chief" chi khi co ten chi huy. video: doi dung quy trinh video
+    (skill pack co "video": video mau, do ky thuat, buoc tao hinh, viec nhieu video / doan, caption, dang video dat);
+    khong co thi chi chay vong giao viec / cham co ban."""
+    teams = raw_teams()
+    tid = tid or current_team()
+    raw = next((t for t in teams if t["id"] == tid), None) or next(t for t in teams if t["default"])
     chief = str(raw.get("chief") or "").strip()
     roles = raw.get("roles") if isinstance(raw.get("roles"), dict) else {}
     excluded = raw.get("excluded") if isinstance(raw.get("excluded"), list) else []
-    cfg = {"mode": "chief" if raw.get("mode") == "chief" and chief else "solo",
+    video = "video" in (raw.get("features") if isinstance(raw.get("features"), list) else [])
+    cfg = {"id": raw["id"], "name": str(raw.get("name") or raw["id"]), "default": raw["default"],
+           "profiles": raw["profiles"], "skill": str(raw.get("skill") or ""), "video": video,
+           "mode": "chief" if raw.get("mode") == "chief" and chief else "solo",
            "chief": chief,
            "approval": "auto" if raw.get("approval") == "auto" else "manual",
            "task_lang": raw.get("task_lang") if raw.get("task_lang") in LANG_NAMES else "",
            # video dat: off = chi gui topic; ask = nut Dang theo kenh; auto = dua thang vao hang doi kenh mac dinh
-           "post_mode": raw.get("post_mode") if raw.get("post_mode") in POST_MODES else "ask",
+           "post_mode": (raw.get("post_mode") if raw.get("post_mode") in POST_MODES else "ask") if video else "off",
            "post_profile": str(raw.get("post_profile") or "").strip(),
            "roles": {str(k): " ".join(str(v).split()) for k, v in roles.items() if str(v).strip()},
-           # profile bo tick tren dashboard: khong o trong doi (profile moi mac dinh vao doi)
+           # profile bo tick tren dashboard: co topic nhung khong o trong doi
            "excluded": {str(x).strip() for x in excluded if str(x).strip()},
            "setup": _setup(raw.get("setup")),
            "detached": {str(k).strip(): {"id": str(v.get("id") or ""), "wipe": bool(v.get("wipe"))}
@@ -161,8 +251,9 @@ def config():
                              if str(x).strip()]}
     for key in LIMITS:
         cfg[key] = _num(raw.get(key, DEFAULTS[key]), key)
-    for key in ("one_video", "show_failed_media"):
-        cfg[key] = bool(raw.get(key, DEFAULTS[key]))
+    cfg["one_video"] = video and bool(raw.get("one_video", DEFAULTS["one_video"]))
+    # doi khong lam video: anh / ket qua chua dat van gui len Telegram (khong co buoc giu lai cho chi huy cham video)
+    cfg["show_failed_media"] = bool(raw.get("show_failed_media", DEFAULTS["show_failed_media"] if video else True))
     return cfg
 
 
@@ -173,14 +264,14 @@ def post_channels():
     except (OSError, ValueError, AttributeError):
         return {}
     return {str(k): v for k, v in raw.items()
-            if isinstance(v, dict) and (v.get("fanpages") or v.get("tiktok"))}
+            if isinstance(v, dict) and (v.get("fanpages") or v.get("tiktok") or v.get("youtube"))}
 
 
 def channel_label(name, entry):
-    """'P1 — FB: Trang A (123), Trang B · TikTok @abc'."""
+    """'P1 — FB: Trang A (123), Trang B · TikTok @abc · YouTube @Kenh'."""
     pages = ", ".join(f"{p['name']} ({p['id']})" if p.get("name") else str(p["id"])
                       for p in entry.get("fanpages") or [])
-    parts = ([f"FB: {pages}"] if pages else []) + ([f"TikTok @{entry['tiktok']}"] if entry.get("tiktok") else [])
+    parts = ([f"FB: {pages}"] if pages else []) + ([f"TikTok @{entry['tiktok']}"] if entry.get("tiktok") else [])         + ([f"YouTube @{entry['youtube']}"] if entry.get("youtube") else [])
     lang = LANG_NAMES.get(entry.get("caption_lang", ""), "")
     return f"{name} — {' · '.join(parts)}" + (f" · caption {lang}" if lang else "")
 
@@ -657,6 +748,15 @@ def briefing(cfg, workers, locks=None, samples=None, scripts=None):
     video = ("• Nhiều video khác nhau: thêm số video ở cuối, vd [[giao: tên Muse | mô tả việc | 5 video]]. Muse nộp "
              "TỪNG video; đạt thì bot tự bảo làm video tiếp, chưa đạt thì làm lại chính video đó.\n"
              if cfg["one_video"] else "")
+    if cfg.get("video", True):
+        video += (
+            "• Video dài chia đoạn: [[giao: tên Muse | mô tả | 4 đoạn]] — Muse làm và nộp từng đoạn theo kịch bản; bot gửi "
+            "kèm khung hình cuối của đoạn trước để đoạn sau nối liền; đủ đoạn đạt thì bot tự nối thành 1 video gửi chủ.\n"
+            "• Chốt kịch bản cho video mẫu: [[kichban: M1 | toàn bộ phân kịch]] — bot lưu bản v1, v2... và tự kèm bản mới "
+            "nhất mỗi khi giao \"theo video mẫu M1\".\n")
+    else:
+        video = ("• Nhiều phần cùng 1 việc: thêm số phần ở cuối, vd [[giao: tên Muse | mô tả việc | 3 phần]]. "
+                 "Muse nộp từng phần; đạt thì bot tự bảo làm phần tiếp.\n")
     return (
         "Từ giờ bạn là CHỈ HUY của một đội Muse. Chủ nhắn cho bạn qua nhóm Telegram; bot Muse2Tele chuyển tin giữa bạn "
         "và các Muse khác (các Muse không nhìn thấy nhau, chỉ nhận đúng phần việc bot chuyển).\n\n"
@@ -670,27 +770,30 @@ def briefing(cfg, workers, locks=None, samples=None, scripts=None):
         "bạn). Cùng 1 việc cho nhiều Muse: [[giao: Muse2, Muse3 | ...]] hoặc [[giao: cả đội | ...]] — mỗi Muse 1 mã "
         "việc T1, T2..., tự dùng bộ nhân vật của mình.\n"
         + video +
-        "• Video dài chia đoạn: [[giao: tên Muse | mô tả | 4 đoạn]] — Muse làm và nộp từng đoạn theo kịch bản; bot gửi "
-        "kèm khung hình cuối của đoạn trước để đoạn sau nối liền; đủ đoạn đạt thì bot tự nối thành 1 video gửi chủ.\n"
-        "• Chốt kịch bản cho video mẫu: [[kichban: M1 | toàn bộ phân kịch]] — bot lưu bản v1, v2... và tự kèm bản mới "
-        "nhất mỗi khi giao \"theo video mẫu M1\".\n"
         "• Nhắn thêm / trả lời Muse đang làm: [[nhan: mã việc | nội dung]]\n"
         f"• Yêu cầu làm lại: [[lamlai: mã việc | cần sửa gì]] (mỗi việc / mỗi video tối đa {r} lần)\n"
         "• Chấm: [[danhgia: mã việc | điểm/10 | nhận xét]]\n\n"
         f"Luật chấm: từ {p}/10 là ĐẠT. Dưới {p}/10 bot tự gửi nhận xét cho Muse làm lại (không cần thêm [[lamlai]]); "
         f"sau {r} lần chưa đạt bot dừng việc và báo chủ. Nhận xét phải nói rõ cần sửa gì, ở giây nào.\n\n"
-        "Bot tự đo kỹ thuật mọi video nộp (máy đo, tin hơn mắt): trùng file đã nộp, không có tiếng, sai khung dọc / "
-        "ngang, sai thời lượng so với mẫu → bot trả Muse làm lại ngay, bạn không phải chấm. Báo cáo nào cũng có dòng "
-        "\"Bot đo: ...\": dùng đúng số đó; không chấm đạt video bot ghi KHÔNG có tiếng.\n\n"
+        + (VIDEO_QC_RULE if cfg.get("video", True) else "") +
         "Chống sai lệch: muốn Muse dùng lại kết quả đã đạt (bộ nhân vật, ảnh, kịch bản...) thì ghi mã việc, vd \"dùng "
         "đúng bộ nhân vật T5\" — bot đính kèm bản ĐÃ DUYỆT; đừng tả lại theo trí nhớ. Điểm, trạng thái, số lần làm lại: "
         "dùng bảng việc bot gửi kèm mỗi báo cáo. Mỗi báo cáo chỉ chấm đúng việc / video trong báo cáo đó.\n\n"
-        + sample_rules(workers, locks, samples, scripts) + "\n\n"
-        f"Trang tổng hợp video: giữ MỘT trang artifact tên \"{ARTIFACT_NAME}\", dạng bảng, mỗi video 1 dòng: Mã việc | "
-        "Muse tạo | Video (thứ tự) | Link tải | Caption | Hashtag | Điểm | Trạng thái | Chỉ đạo tiếp. Mỗi báo cáo video "
-        "bot gửi kèm \"dòng chuẩn\": chép đúng dòng đó vào trang (làm lại thì sửa dòng cũ), điền điểm khi chấm. Gửi link "
-        "trang cho chủ khi cập nhật.\n\n"
-        "Trả lời ngắn: xác nhận đã hiểu, liệt kê đội và các video mẫu đang có.")
+        + ((sample_rules(workers, locks, samples, scripts) + "\n\n" + VIDEO_SUMMARY_RULE
+            + "Trả lời ngắn: xác nhận đã hiểu, liệt kê đội và các video mẫu đang có.") if cfg.get("video", True)
+           else "Trả lời ngắn: xác nhận đã hiểu và liệt kê đội."))
+
+
+# Phan quy trinh video trong gioi thieu doi: chi gui khi skill pack cua doi bat "video".
+VIDEO_QC_RULE = (
+    "Bot tự đo kỹ thuật mọi video nộp (máy đo, tin hơn mắt): trùng file đã nộp, không có tiếng, sai khung dọc / "
+    "ngang, sai thời lượng so với mẫu → bot trả Muse làm lại ngay, bạn không phải chấm. Báo cáo nào cũng có dòng "
+    "\"Bot đo: ...\": dùng đúng số đó; không chấm đạt video bot ghi KHÔNG có tiếng.\n\n")
+VIDEO_SUMMARY_RULE = (
+    f"Trang tổng hợp video: giữ MỘT trang artifact tên \"{ARTIFACT_NAME}\", dạng bảng, mỗi video 1 dòng: Mã việc | "
+    "Muse tạo | Video (thứ tự) | Link tải | Caption | Hashtag | Điểm | Trạng thái | Chỉ đạo tiếp. Mỗi báo cáo video "
+    "bot gửi kèm \"dòng chuẩn\": chép đúng dòng đó vào trang (làm lại thì sửa dòng cũ), điền điểm khi chấm. Gửi link "
+    "trang cho chủ khi cập nhật.\n\n")
 
 
 LOOK_RULE = (
@@ -747,7 +850,7 @@ def _footer(task, cfg, target=None):
         rule = "\n\nMỗi lần nộp chỉ gửi 1 video (bot chỉ chuyển video đầu tiên cho chỉ huy chấm)."
     else:
         rule = ""
-    if is_video_task(task):
+    if cfg.get("video", True) and is_video_task(task):
         need = ["có tiếng (thoại / nhạc / tiếng động)"]
         if target and target.get("shape"):
             need.append(f"khung {target['shape']} như video mẫu")
@@ -873,7 +976,7 @@ def report_text(task, tasks, why, cfg, note="", scripts=None):
                    "bản, mặt từng nhân vật giống ảnh bộ nhân vật khoá (bot đính kèm sau ảnh của Muse) và giống nhau "
                    "giữa các ảnh, tóc + trang phục đúng kịch bản, không logo / chữ. Mặt khác bộ khoá hoặc thiếu giai "
                    "đoạn → chưa đạt, ghi rõ ảnh nào sai gì.\n")
-    elif is_video_task(task):
+    elif cfg.get("video", True) and is_video_task(task):
         info = video_info(task)
         missing = [name for name, key in (("caption", "caption"), ("hashtag", "hashtag")) if not info[key]]
         summary = (f"\nDòng chuẩn cho trang \"{ARTIFACT_NAME}\":\n{summary_row(task, info)}\n"

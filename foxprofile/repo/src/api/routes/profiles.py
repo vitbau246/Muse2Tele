@@ -117,7 +117,7 @@ def create_profile(
         body.engine,
     ):
         raise HTTPException(status_code=409, detail="Profile already exists")
-    pm.set_auto_post(body.name, body.auto_post_fanpage, body.auto_post_tiktok)
+    pm.set_auto_post(body.name, body.auto_post_fanpage, body.auto_post_tiktok, body.auto_post_youtube)
 
     logger.info("API created profile: %s", body.name)
     if body.engine == "chrome":
@@ -189,8 +189,13 @@ def update_profile(
         name, new_name, new_proxy or "", new_os, new_timezone or None, new_locale or None
     ):
         raise HTTPException(status_code=409, detail="Update failed (name conflict?)")
-    if "auto_post_fanpage" in supplied or "auto_post_tiktok" in supplied:
-        pm.set_auto_post(new_name, supplied.get("auto_post_fanpage"), supplied.get("auto_post_tiktok"))
+    if {"auto_post_fanpage", "auto_post_tiktok", "auto_post_youtube"} & set(supplied):
+        pm.set_auto_post(
+            new_name,
+            supplied.get("auto_post_fanpage"),
+            supplied.get("auto_post_tiktok"),
+            supplied.get("auto_post_youtube"),
+        )
 
     logger.info("API updated profile: %s -> %s", name, new_name)
     bus.emit()

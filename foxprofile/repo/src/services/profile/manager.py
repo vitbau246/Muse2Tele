@@ -113,6 +113,7 @@ class ProfileManager:
                             "engine": _engine_or_default(p_data.get("engine")),
                             "auto_post_fanpage": p_data.get("auto_post_fanpage") is True,
                             "auto_post_tiktok": p_data.get("auto_post_tiktok") is True,
+                            "auto_post_youtube": p_data.get("auto_post_youtube") is True,
                         }
                         self.profiles[name] = Profile(**clean_data)
                 logger.info("Loaded %d profiles", len(self.profiles))
@@ -235,9 +236,13 @@ class ProfileManager:
             return True
 
     def set_auto_post(
-        self, name: str, fanpage: bool | None = None, tiktok: bool | None = None
+        self,
+        name: str,
+        fanpage: bool | None = None,
+        tiktok: bool | None = None,
+        youtube: bool | None = None,
     ) -> bool:
-        """Turn automatic posting to a Facebook page / TikTok on or off; None keeps the value."""
+        """Turn automatic posting to a Facebook page / TikTok / YouTube on or off; None keeps the value."""
         with self._lock:
             profile = self.profiles.get(name)
             if profile is None:
@@ -246,6 +251,8 @@ class ProfileManager:
                 profile.auto_post_fanpage = bool(fanpage)
             if tiktok is not None:
                 profile.auto_post_tiktok = bool(tiktok)
+            if youtube is not None:
+                profile.auto_post_youtube = bool(youtube)
             self.save_profiles()
             return True
 
@@ -312,6 +319,7 @@ class ProfileManager:
                     engine=src.engine,
                     auto_post_fanpage=src.auto_post_fanpage,
                     auto_post_tiktok=src.auto_post_tiktok,
+                    auto_post_youtube=src.auto_post_youtube,
                 )
                 self.save_profiles()
         except OSError as e:  # FileExistsError included

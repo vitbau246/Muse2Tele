@@ -115,6 +115,14 @@ trong chat riêng với bot để xem bot đang chờ gì.
 | 👌 | Muse đã trả lời xong |
 | 👎 | Lỗi, bot sẽ trả lời kèm lý do |
 
+Trong lúc Muse làm việc, topic có 1 tin **⚙️ &lt;tên Muse&gt;: &lt;việc đang làm&gt;** (VD `⚙️ Muse8: Uploading video
+parts`, `⚙️ Muse9: Connecting...`) — chính là dòng chữ dưới tên Muse trên web. Tin này tự cập nhật khi Muse chuyển
+việc (kể cả việc chạy nền), không kêu thông báo, và tự xoá khi Muse xong. Dòng "… is typing" của Telegram cũng đổi
+theo việc Muse đang làm (đang gửi ảnh / quay video / gửi file…).
+
+Muse xin duyệt (Allow/Deny) mà bot không tự bấm Allow được trong 20 giây (tự duyệt đang tắt, hoặc nút lạ), bot gửi tin
+**🔐 … đang chờ bạn duyệt** (có chuông) kèm nội dung yêu cầu và nút **✅ Cho phép**; bấm là bot bấm Allow trên Muse.
+
 Mẹo:
 
 - Gửi nhiều ảnh/video cùng lúc (album) sẽ thành **1 tin** trong Muse.
@@ -122,6 +130,11 @@ Mẹo:
 - Muse đưa ra lựa chọn thì bot hiện **nút bấm**; bấm nút là gửi lựa chọn cho Muse.
 - Bạn gõ trực tiếp trên web Muse thì câu trả lời vẫn hiện trong topic.
 - Telegram chỉ cho bot nhận file **tối đa 20 MB** và gửi file **tối đa 50 MB**.
+- Ảnh / video / file của Muse không gửi được về Telegram (Muse báo *not found*, quá 50 MB, Telegram từ chối...): bot
+  báo trong topic và **tự nhờ Muse gửi link tải tạm (hạn 3 ngày)**; link hiện trong topic khi Muse trả lời. Mỗi file
+  chỉ được nhờ 1 lần trong 6 tiếng, để Muse gửi lại file vẫn lỗi thì bot không hỏi mãi.
+- Mặc định mỗi Muse **gửi kèm link tải tạm (hạn 3 ngày) ngay sau mỗi file**. muse.ai không có cài đặt cho việc này,
+  nên bot tự gửi quy tắc vào bộ nhớ dài hạn của từng Muse: 1 lần khi Muse rảnh, gửi lại sau khi reset Muse.
 
 ## Các lệnh của bot
 
@@ -140,15 +153,45 @@ vào BotFather để đặt `/setcommands`, `/setdescription` hay `/setabouttext
 | `/allow_on`, `/allow_off` | Chat riêng hoặc nhóm | Bật / tắt việc bot tự bấm **Allow** khi Muse xin quyền (mặc định bật) |
 | `/reset` | Trong topic của profile (hoặc `/reset tên_profile` ở chat riêng) | **Xoá vĩnh viễn** toàn bộ dữ liệu Muse của profile và toàn bộ tin trong topic, sau khi bạn bấm nút xác nhận. Xong bot đặt tên agent Muse = tên profile |
 | `/reset` | Ở mục **General** (Muse chỉ huy), hoặc `/reset tên_chỉ_huy` | **Reset cả đội**: chọn 1 mẫu ngữ cảnh (lấy từ dashboard → Đội Muse) hoặc *Giữ ngữ cảnh đang có*, bấm xác nhận. Bot xoá dữ liệu Muse của chỉ huy + mọi thành viên, rồi tự gửi lại ngữ cảnh cho từng Muse và giới thiệu lại đội. Đổi mẫu thì bỏ luôn việc, video mẫu, kịch bản chốt (bộ nhân vật khoá cất vào thư mục lưu trữ). Có nút *Chỉ reset chỉ huy* nếu chỉ cần xoá Muse chỉ huy |
+| `/dang` | Trong topic của profile, `/dang tên_profile`, hoặc ở General / chat riêng (tổng quan mọi profile) | **Đăng bài chủ động**: xem hàng đợi đăng (từng video: TikTok / Fanpage / YouTube ✅ ⏳ ❌, bộ đăng bài của Muse), video lỗi, số bài hôm nay, link vừa đăng; nút 🔄 Làm mới · 🔁 Đăng lại ngay · ⏸ Tạm dừng / ▶️ Tiếp tục · ▶️ Bật AutoPost (khi AutoPost không chạy). Gõ thêm: `thulai` (đưa video trong `failed\` về hàng đợi và đăng lại ngay; đích đã đăng được bỏ qua nhờ chống trùng), `dung` / `tiep` (tạm dừng / tiếp tục profile; không tên profile = tất cả), `drive từ khoá` (tìm video trên Google Drive của profile qua trình duyệt của nó, bấm chọn file thì bot tải về hàng đợi, Muse làm bộ đăng bài rồi AutoPost đăng). Mỗi kết quả đăng (xong / lỗi / bỏ) bot báo vào topic của profile |
+| `/rebrand` | Trong topic của profile, hoặc `/rebrand tên_profile [định hướng]` | **Đổi nhận diện kênh** sau khi bấm xác nhận: tạm tắt Tự động đăng, **xoá mọi video TikTok** của tài khoản trong Bảng đăng bài (không hoàn tác), nhờ Muse làm bộ nhận diện (khối `BRANDKIT <mã>` + ảnh đại diện, ảnh bìa FB, banner YT). Đủ bộ thì `social_post\rebrand.py` tạo Trang Facebook + kênh YouTube mới (Trang / kênh cũ giữ nguyên), đổi tên / tiểu sử / ảnh TikTok (username mới nếu còn trống), gắn vào Bảng đăng bài, bật lại Tự động đăng. Lỗi giữa chừng: chạy lại lệnh bot báo, bước đã xong không làm lại. TikTok chỉ cho đổi tên 7 ngày/lần, username 30 ngày/lần |
+| `/kenhmoi` | Ở đâu cũng được | **Lịch tạo kênh mới định kỳ** cho mọi profile FoxProfile (hoặc các profile đã `chon`): mỗi đợt bot nhờ Muse của từng profile làm bộ nhận diện mới (như `/rebrand`, tên / handle phải khác các kênh đã tạo), đủ bộ thì `social_post\rebrand.py --daily` tạo **Trang Facebook + kênh YouTube mới**. Không tắt Tự động đăng, không đụng TikTok / Bảng đăng bài: kênh đang đăng giữ nguyên. Đợt sau = đợt trước **+24h30ph** (giờ chạy tự dịch 30 phút mỗi ngày: 08:00 → 08:30 → 09:00...). `bat [HH:MM]` (bỏ giờ = chạy ngay), `tat`, `ngay` (chạy 1 đợt ngay, nhịp tính lại từ bây giờ), `chon Muse8 Muse9` / `chon tatca`, `huong <định hướng>` (`-` để xoá); gõ trống = trạng thái. Profile chưa có topic hoặc đang rebrand / tạo kênh dở thì bỏ qua đợt đó. Kết quả từng đợt ghi vào `social_post\data\channels\<profile>.daily.json`, cấu hình kênh trong thư mục bộ nhận diện `Videos\downloads\channels\<profile>\<mã>\channels.json` |
 
-Chỉ chủ bot dùng được `/setup`, `/gan`, `/kiemtra`, `/allow_on`, `/allow_off`, `/reset`, `/tach`. Mọi người trong nhóm đều nhắn được cho Muse
+Chỉ chủ bot dùng được `/setup`, `/gan`, `/kiemtra`, `/allow_on`, `/allow_off`, `/reset`, `/tach`, `/rebrand`, `/kenhmoi`, `/dang`. Mọi người trong nhóm đều nhắn được cho Muse
 trong các topic, nên **chỉ thêm người bạn tin tưởng** vào nhóm.
+
+## Nhiều đội Muse, mỗi đội 1 nhóm Telegram
+
+Hộp **Đội Muse** trên dashboard có thanh chọn đội ở trên cùng. **Đội 1** là đội mặc định: nhận mọi profile chưa
+thuộc đội khác (profile mới cũng vào đây), dùng nhóm Telegram bạn gắn đầu tiên. Thêm đội:
+
+1. Bấm **＋ Thêm đội**, đặt tên. Ở mục **Đội và nhóm Telegram** tick các profile thuộc đội này (mỗi profile chỉ thuộc
+   1 đội; bỏ tick thì profile về đội mặc định), bấm **Lưu**.
+2. Trên Telegram tạo nhóm mới, bật **Chủ đề (Topics)**, thêm bot làm quản trị viên (quyền *Quản lý chủ đề*), gõ
+   `/setup` trong nhóm rồi bấm tên đội. Nút *Tạo đội mới* cũng tạo luôn đội mang tên nhóm.
+3. Khoảng 1 phút sau bot tạo topic cho từng profile của đội trong nhóm đó. Profile chuyển đội thì topic ở nhóm cũ
+   nhận thông báo và ngừng đồng bộ, nhóm mới có topic mới.
+
+Mỗi đội có chỉ huy, thành viên, skill, ngôn ngữ, ngữ cảnh, thông số chấm, bảng việc (`/tiendo` trong nhóm của đội;
+ở chat riêng thì hiện mọi đội) và thư mục dữ liệu riêng (`Videos\downloads\muse_telebot\doi\<mã đội>\`; đội mặc
+định giữ đường dẫn cũ). Mã việc T1, T2... và video mẫu M1... đánh số riêng từng đội.
+
+## Skill: mẫu ngữ cảnh + thiết lập cho từng kiểu việc
+
+Skill là gói mẫu cho 1 kiểu việc: ngữ cảnh cho chỉ huy, ngữ cảnh cho thành viên, vai trò và thiết lập đi kèm. Các
+thiết lập làm video (video mẫu, đo kỹ thuật video nộp, bước tạo hình, việc nhiều video / chia đoạn, caption, đăng
+video đạt, nộp từng video, giữ ảnh/video chưa đạt) không còn là thiết lập chung của đội mà nằm trong skill: skill
+video bật **Quy trình làm video**; skill *Đội việc chung* (nghiên cứu, viết, làm ảnh) tắt nó, bot chỉ chạy vòng giao
+việc / chấm. Bấm **Áp dụng** trên 1 skill để điền cho cả đội đang tick, sửa lại nếu cần, rồi **Lưu**.
+
+Skill có sẵn nằm ở `foxprofile\repo\src\core\skills\`. **Cài skill từ file (.json)** chép skill vào
+`muse_telebot\skills\` (không bị cập nhật ghi đè, không đưa lên git). Định dạng: [docs/SKILL_PACKS.md](docs/SKILL_PACKS.md).
 
 ## Đội Muse: 1 Muse làm chỉ huy
 
 Mặc định mỗi Muse tự làm trong topic của mình (**Độc lập**). Muốn 1 Muse điều phối cả đội:
 
-1. Trên dashboard FoxProfile bấm **Đội Muse** ở thanh bên, chọn **Có chỉ huy**.
+1. Trên dashboard FoxProfile bấm **Đội Muse** ở thanh bên, chọn đội, chọn **Có chỉ huy**.
 2. Chọn **Muse chỉ huy**. Nên chọn Muse không dùng cho việc khác, vì khung chat của nó dùng để điều phối.
 3. Chọn cách **gửi việc**:
    - **Duyệt tay**: mỗi việc chỉ huy giao hiện trong mục General kèm nút ✅ Gửi / ❌ Bỏ.
@@ -160,15 +203,15 @@ Mặc định mỗi Muse tự làm trong topic của mình (**Độc lập**). M
    và ngữ cảnh đội của nó; tick thêm *Xoá luôn dữ liệu Muse* để Muse không còn nhớ gì của đội (không hoàn tác),
    không tick thì bot nhắn Muse rằng nó đã rời đội. Muốn cho vào đội lại thì tick lại.
 5. Mục **Duyệt kết quả**: **điểm tối thiểu để đạt** (/10, mặc định 8), số lần làm lại tối đa (3), số phút im lặng
-   trước khi bot nhắc Muse (3), báo quá hạn sau (30 phút), số việc mới mỗi giờ (20); **Video nộp từng cái một**
-   (mặc định bật); **Gửi cả ảnh/video chưa đạt lên Telegram** (mặc định tắt).
+   trước khi bot nhắc Muse (3), báo quá hạn sau (30 phút), số việc mới mỗi giờ (20). **Video nộp từng cái một**,
+   **Gửi cả ảnh/video chưa đạt lên Telegram** và **Đăng video đạt** nằm trong mục **Skill → Thiết lập theo skill**.
 6. Ô **Xoá dữ liệu Muse khi lưu** tự tick khi bạn đổi ngữ cảnh: bot xoá sạch dữ liệu Muse (lịch sử chat, file,
    artifact, tin trong topic) của đúng các Muse vừa đổi ngữ cảnh rồi mới gửi ngữ cảnh mới, để không lẫn thông tin cũ.
    Đổi sang mẫu khác thì bot bỏ luôn việc, video mẫu, kịch bản và cất bộ nhân vật khoá cũ. Không đổi ngữ cảnh mà tự
    tick thì xoá chỉ huy và cả đội. Không hoàn tác; dashboard hỏi xác nhận.
 7. Bấm **Lưu**: bot áp dụng ngay, không cần khởi động lại.
 
-Mục **Ngôn ngữ và ngữ cảnh** có nút mẫu **Phim ngắn gia đình 4 người**: bấm 1 lần là điền cho cả đội. Chỉ huy
+Mục **Skill** có skill **Gia đình 4 người — có thoại**: bấm **Áp dụng** 1 lần là điền cho cả đội. Chỉ huy
 nhận vai **nghiên cứu, phân tích, xây dựng kịch bản chi tiết** (không tự làm video); mọi Muse đang tick nhận vai
 **xây dựng nhân vật và sản xuất video theo kịch bản** (ô vai trò còn trống được điền sẵn). Muse đang có ngữ cảnh
 khác thì dashboard hỏi trước khi thay. Bấm **Lưu** để bot gửi cho các Muse.
@@ -311,16 +354,45 @@ Muse2tele\
 - **Tên agent:** khi tự tạo topic hoặc `/gan`, nếu agent Muse còn tên mặc định `Muse` thì bot gửi
   `Change your name to <profile>` để tên agent trùng tên profile / topic. Agent đã có tên riêng thì giữ nguyên.
 - `MUSE_UPLOAD_DIR` phải nằm trong `FOXPROFILE_UPLOAD_DIRS`. Không chạy hai bot cùng token (Telegram báo 409).
-- **Tự động đăng fanpage / TikTok (`social_post\`):**
-  1. Trên dashboard FoxProfile, sửa profile → tick **Tự động đăng lên fanpage Facebook** và/hoặc **TikTok**.
-     Mở profile và đăng nhập Facebook / TikTok trong trình duyệt của profile đó.
+- **Tự động lưu video Muse:** mặc định bật, bot giữ 1 bản mọi video tải từ chat Muse (kể cả video giữ lại cho chỉ
+  huy chấm hay quá 50 MB không gửi được Telegram, tới 1 GB) vào `E:\Videos\Downloaded\<tên profile>\`, ví dụ
+  `E:\Videos\Downloaded\Muse2\`. Bật / tắt và đổi thư mục ở dashboard → **Thư mục upload** → *Tự động lưu video
+  Muse* (`MUSE_SAVE_VIDEOS`, `MUSE_SAVE_VIDEO_DIR` trong `.env`, API `GET/PUT /settings/video-save`); bot đọc lại
+  `.env` khi file đổi, không cần chạy lại. Cùng tên cùng dung lượng thì không lưu lại; khác nội dung thì thêm `_2`.
+- **Tạo Trang Facebook + kênh YouTube theo profile:** `python social_post\create_channels.py --profile Muse9`
+  đọc `social_post\data\channels\<profile>.json` (tên, hạng mục, tiểu sử / mô tả, ảnh đại diện, ảnh bìa / banner
+  nằm trong `Videos\downloads`, `account` = tên trang cá nhân để chuyển về sau khi tạo Trang). Kênh YouTube là kênh
+  thêm (Tài khoản thương hiệu) của tài khoản Google đang đăng nhập; ảnh, mô tả, liên kết gắn trong YouTube Studio.
+  Tạo xong ghi `created` vào file, chạy lại không tạo trùng; `--dry-run` chỉ điền form, `--refresh` gắn lại ảnh /
+  mô tả kênh YouTube. Không đăng ký tài khoản mới, không vượt xác minh SĐT / CAPTCHA.
+- **Tự động đăng fanpage / TikTok / kênh YouTube (`social_post\`):**
+  1. Trên dashboard FoxProfile, sửa profile → tick **Tự động đăng lên fanpage Facebook**, **TikTok** và/hoặc
+     **kênh YouTube**; Bảng đăng bài ghi Page ID (asset_id trong link Business Suite), @TikTok, @kênh YouTube.
+     Mở profile và đăng nhập Facebook / TikTok / Google trong trình duyệt của profile đó.
   2. `start_all.bat` mở thêm cửa sổ **Muse2tele_AutoPost** (hoặc chạy `start_autopost.bat`). Nó tạo thư mục
      `Videos\downloads\social_queue\<tên profile>\` cho mỗi profile đã tick.
-  3. Bỏ file vào thư mục đó: video → TikTok + fanpage, ảnh → fanpage. Caption lấy từ file `.txt` cùng tên
+  3. Bỏ file vào thư mục đó: video → TikTok + fanpage + YouTube, ảnh → fanpage. Caption lấy từ file `.txt` cùng tên
      (vd `clip1.mp4` + `clip1.txt`), không có thì dùng tên file. `pages.txt` (mỗi dòng 1 tên Trang) để chỉ đăng lên
-     một số Trang; không có thì đăng lên mọi Trang tài khoản quản lý.
+     một số Trang; không có thì đăng lên mọi Trang tài khoản quản lý. YouTube: dòng đầu caption = tiêu đề, phần còn
+     lại = mô tả; ảnh `clip1.cover1.jpg` .. `clip1.cover3.jpg` cạnh video = thumbnail (2-3 ảnh: Thử nghiệm A/B), cần
+     kênh đã xác minh số điện thoại (Studio → Cài đặt → Kênh → Điều kiện sử dụng tính năng → bậc trung).
+  - **Bộ đăng bài do Muse làm (bắt buộc với video):** video chưa có `clip1.post.json` thì AutoPost CHƯA đăng mà ghi
+     `clip1.kit_request.json`; bot nhờ Muse (Muse đã làm video nếu là video đội, không thì Muse của profile) làm bộ
+     đăng bài, gửi kèm 5 khung hình trích từ video: tiêu đề + 3 tiêu đề thử nghiệm, mô tả, hashtag, caption TikTok,
+     nội dung Facebook (khối `POSTKIT <mã>` + JSON) và 3 cover `<mã>-a/b/c.jpg`. Bot lưu thành `clip1.post.json` +
+     `clip1.cover1..3.jpg` rồi AutoPost đăng: YouTube = tiêu đề + mô tả + hashtag + thử nghiệm 3 cover, TikTok / Facebook
+     = caption riêng. Có bộ đăng bài mà thiếu cover thì chờ thêm 60 phút. Quá 3 giờ Muse chưa làm thì nhờ lại (tối đa
+     2 lần). Tắt: `AUTO_POST_REQUIRE_KIT=0` trong `.env`. Định dạng: `social_post\post_kit.py`.
+     **Bộ nhớ dài hạn:** Muse nào sẽ được nhờ làm bộ đăng bài (Muse của profile đã tick Tự động đăng và có kênh trong
+     Bảng đăng bài; Muse thợ của đội chỉ huy có đăng video đội) được bot gửi sẵn quy tắc bộ đăng bài (nền tảng, kênh,
+     quy cách 3 cover, định dạng `POSTKIT`) vào bộ nhớ dài hạn khi Muse rảnh; mỗi yêu cầu sau đó chỉ cần nhắc ngắn. Đổi
+     tick / kênh thì gửi lại, reset Muse thì gửi lại, bỏ hết tick thì nhắn Muse bỏ quy tắc. Trạng thái: state
+     `postkit_rule`.
   4. Đăng xong file chuyển sang `done\`, lỗi 3 lần thì sang `failed\`. Chưa đăng nhập thì 30 phút thử lại.
      Nhật ký: `social_post\logs\auto_post.log`. Thử không bấm Đăng: `python auto_post.py --dry-run`.
-  Script lẻ: `fanpage_post.py --profile P --list-pages | --plan jobs.json` (định dạng: `fanpage_jobs.py`),
-  `tiktok_post.py --profile P --folder D --file F [--caption "..."]`. Script làm việc trên một tab riêng, không
+  Script lẻ: `fanpage_post.py --profile P --list-pages | --plan jobs.json` (định dạng: `fanpage_jobs.py`; danh sách
+  Trang đọc thẳng từ dữ liệu nhúng trong HTML Business Suite, ~7 giây, không bấm bộ chọn Trang),
+  `tiktok_post.py --profile P --folder D --file F [--caption "..."]`,
+  `youtube_post.py --profile P --folder D --file F --expect-channel Handle [--caption-file F.txt] [--thumbs a b c]`
+  (`--thumbs-only VIDEO_ID --thumbs a b c`: đặt lại thumbnail / A/B cho video đã đăng). Script làm việc trên một tab riêng, không
   đụng tab Muse của bot. Thư mục hàng đợi phải nằm trong `FOXPROFILE_UPLOAD_DIRS` (đổi ở dashboard → Thư mục upload).

@@ -22,7 +22,7 @@ from ..theme.styles import ACCENT_STYLE, DLG_FIELD_KWARGS, OUTLINE_STYLE
 def open_profile_dialog(
     page: ft.Page,
     proxy_service: IProxyService,
-    on_save: Callable[[str, str, str, str, str, str, bool, bool], str | None],
+    on_save: Callable[[str, str, str, str, str, str, bool, bool, bool], str | None],
     profile: Profile | None = None,
 ) -> None:
     is_edit = profile is not None
@@ -103,6 +103,11 @@ def open_profile_dialog(
         value=profile.auto_post_tiktok if profile is not None else False,
         active_color=COLORS["sidebar"],
     )
+    youtube_cb = ft.Checkbox(
+        label=get_string("auto_post_youtube"),
+        value=profile.auto_post_youtube if profile is not None else False,
+        active_color=COLORS["sidebar"],
+    )
     geo_error = ft.Text("", size=12, color=COLORS["error"], visible=False)
     # The Check IP report is the only part that can grow; it scrolls on its own
     # so the dialog keeps its height on short windows.
@@ -174,6 +179,7 @@ def open_profile_dialog(
             engine,
             bool(fanpage_cb.value),
             bool(tiktok_cb.value),
+            bool(youtube_cb.value),
         )
         if error:
             name_error.value = error
@@ -188,97 +194,140 @@ def open_profile_dialog(
         # Text fields keep Material's 48px height so rows of fields and
         # dropdowns (which cannot go below 48px) line up.
         dropdown.text_size = 14
+    body, max_btn = _resizable_body(page)
     dlg = ft.AlertDialog(
         modal=True,
+        # Short windows: the whole dialog scrolls (the last fields used to be pushed out of view)
+        scrollable=True,
         bgcolor=COLORS["card_bg"],
         shape=ft.RoundedRectangleBorder(radius=12),
         title_padding=ft.Padding.only(left=24, right=24, top=22, bottom=0),
         content_padding=ft.Padding.only(left=24, right=24, top=4, bottom=8),
         actions_padding=ft.Padding.only(left=24, right=24, top=8, bottom=20),
-        title=ft.Column(
-            spacing=4,
-            tight=True,
+        title=ft.Row(
+            vertical_alignment=ft.CrossAxisAlignment.START,
             controls=[
-                ft.Text(title, size=19, font_family=FONT_BOLD, color=COLORS["text_main"]),
-                ft.Text(subtitle, size=13.5, color=COLORS["text_sub"]),
+                ft.Column(
+                    spacing=4,
+                    tight=True,
+                    expand=True,
+                    controls=[
+                        ft.Text(title, size=19, font_family=FONT_BOLD, color=COLORS["text_main"]),
+                        ft.Text(subtitle, size=13.5, color=COLORS["text_sub"]),
+                    ],
+                ),
+                max_btn,
             ],
         ),
-        content=ft.Container(
-            width=460,
-            content=ft.Column(
-                tight=True,
-                spacing=4,
-                horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+        content=body,
+    )
+    body.content = ft.Column(
+        tight=True,
+        spacing=4,
+        horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+        controls=[
+            _field(get_string("profile_name"), name_field),
+            name_error,
+            ft.Row(
+                spacing=12,
+                vertical_alignment=ft.CrossAxisAlignment.START,
                 controls=[
-                    _field(get_string("profile_name"), name_field),
-                    name_error,
-                    ft.Row(
-                        spacing=12,
-                        vertical_alignment=ft.CrossAxisAlignment.START,
-                        controls=[
-                            ft.Container(
-                                expand=3,
-                                content=_field(
-                                    get_string("browser_engine"),
-                                    engine_dropdown,
-                                    get_string("engine_locked") if is_edit else None,
-                                ),
-                            ),
-                            ft.Container(
-                                expand=2,
-                                content=_field(get_string("operating_system"), os_dropdown),
-                            ),
-                        ],
+                    ft.Container(
+                        expand=3,
+                        content=_field(
+                            get_string("browser_engine"),
+                            engine_dropdown,
+                            get_string("engine_locked") if is_edit else None,
+                        ),
                     ),
-                    engine_note,
-                    _field(
-                        get_string("proxy_optional"), proxy_field, get_string("proxy_format_hint")
+                    ft.Container(
+                        expand=2,
+                        content=_field(get_string("operating_system"), os_dropdown),
                     ),
-                    ft.Row(spacing=8, controls=[check_btn, ip_btn]),
-                    proxy_error,
-                    ft.Row(
-                        spacing=12,
-                        controls=[
-                            ft.Container(
-                                expand=3,
-                                content=_field(get_string("timezone_optional"), timezone_field),
-                            ),
-                            ft.Container(
-                                expand=2,
-                                content=_field(get_string("locale_optional"), locale_field),
-                            ),
-                        ],
-                    ),
-                    ft.Text(get_string("geo_follow_hint"), size=12, color=COLORS["text_dim"]),
-                    geo_error,
-                    geo_result,
-                    _auto_post_section(fanpage_cb, tiktok_cb),
                 ],
             ),
-        ),
-        actions=[
-            ft.TextButton(
-                get_string("cancel"),
-                style=ft.ButtonStyle(color=COLORS["text_sub"]),
-                on_click=lambda _: page.pop_dialog(),
+            engine_note,
+            _field(get_string("proxy_optional"), proxy_field, get_string("proxy_format_hint")),
+            ft.Row(spacing=8, controls=[check_btn, ip_btn]),
+            proxy_error,
+            ft.Row(
+                spacing=12,
+                controls=[
+                    ft.Container(
+                        expand=3,
+                        content=_field(get_string("timezone_optional"), timezone_field),
+                    ),
+                    ft.Container(
+                        expand=2,
+                        content=_field(get_string("locale_optional"), locale_field),
+                    ),
+                ],
             ),
-            ft.Button(
-                save_label,
-                icon=save_icon,
-                style=ACCENT_STYLE,
-                on_click=on_submit,
-            ),
+            ft.Text(get_string("geo_follow_hint"), size=12, color=COLORS["text_dim"]),
+            geo_error,
+            geo_result,
+            _auto_post_section(fanpage_cb, tiktok_cb, youtube_cb),
         ],
     )
+    dlg.actions = [
+        ft.TextButton(
+            get_string("cancel"),
+            style=ft.ButtonStyle(color=COLORS["text_sub"]),
+            on_click=lambda _: page.pop_dialog(),
+        ),
+        ft.Button(
+            save_label,
+            icon=save_icon,
+            style=ACCENT_STYLE,
+            on_click=on_submit,
+        ),
+    ]
+    body.content.scroll = ft.ScrollMode.AUTO if _MAXIMIZED["on"] else None
     page.show_dialog(dlg)
+
+
+DIALOG_WIDTH = 600
+_MAXIMIZED = {"on": False}  # remembered for the next dialog while the app runs
+
+
+def _resizable_body(page: ft.Page) -> tuple[ft.Container, ft.IconButton]:
+    """Dialog body plus a maximize / restore button for the title row.
+
+    Maximized: nearly the window's width and height, the content scrolls inside."""
+    body = ft.Container(width=DIALOG_WIDTH)
+    btn = ft.IconButton(icon_size=20, icon_color=COLORS["text_sub"])
+
+    def apply(on: bool) -> None:
+        _MAXIMIZED["on"] = on
+        if on:
+            body.width = max(DIALOG_WIDTH, int((page.width or 1280) - 160))
+            body.height = max(300, int((page.height or 800) - 240))
+        else:
+            body.width, body.height = DIALOG_WIDTH, None
+        # Maximized: fixed height, so the column scrolls. Normal: the (scrollable) dialog scrolls; a scrolling
+        # column inside an unbounded height would make Flutter fail.
+        if isinstance(body.content, ft.Column):
+            body.content.scroll = ft.ScrollMode.AUTO if on else None
+        btn.icon = ft.Icons.FULLSCREEN_EXIT if on else ft.Icons.FULLSCREEN
+        btn.tooltip = get_string("modal_restore" if on else "modal_maximize")
+
+    def toggle(_: ft.ControlEvent) -> None:
+        apply(not _MAXIMIZED["on"])
+        page.update()
+
+    btn.on_click = toggle
+    apply(_MAXIMIZED["on"])
+    return body, btn
 
 
 _DATA = ft.TextStyle(font_family=FONT_DATA, size=13)
 _WARN_TINT = COLORS["warn_tint"]
 
 
-def _auto_post_section(fanpage_cb: ft.Checkbox, tiktok_cb: ft.Checkbox) -> ft.Container:
-    """Two ticks for Muse2Tele's social_post, set apart from the browser identity above."""
+def _auto_post_section(
+    fanpage_cb: ft.Checkbox, tiktok_cb: ft.Checkbox, youtube_cb: ft.Checkbox
+) -> ft.Container:
+    """Three ticks for Muse2Tele's social_post, set apart from the browser identity above."""
     return ft.Container(
         margin=ft.Margin.only(top=14),
         padding=ft.Padding.only(left=12, right=12, top=10, bottom=8),
@@ -297,6 +346,7 @@ def _auto_post_section(fanpage_cb: ft.Checkbox, tiktok_cb: ft.Checkbox) -> ft.Co
                 ),
                 fanpage_cb,
                 tiktok_cb,
+                youtube_cb,
                 ft.Text(get_string("auto_post_hint"), size=12, color=COLORS["text_dim"]),
             ],
         ),

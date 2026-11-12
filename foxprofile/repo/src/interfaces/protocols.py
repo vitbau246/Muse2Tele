@@ -29,7 +29,11 @@ class IProfileManager(Protocol):
     ) -> bool: ...
 
     def set_auto_post(
-        self, name: str, fanpage: bool | None = None, tiktok: bool | None = None
+        self,
+        name: str,
+        fanpage: bool | None = None,
+        tiktok: bool | None = None,
+        youtube: bool | None = None,
     ) -> bool: ...
 
     def delete_profile(self, name: str) -> bool: ...

@@ -43,6 +43,7 @@ def profile_response(profile: Profile, bl: IBrowserLauncher) -> ProfileResponse:
         engine=profile.engine,
         auto_post_fanpage=profile.auto_post_fanpage,
         auto_post_tiktok=profile.auto_post_tiktok,
+        auto_post_youtube=profile.auto_post_youtube,
         data_dir=os.path.join(os.getcwd(), DATA_DIR, profile.name),
         is_running=bl.is_running(profile.name),
     )

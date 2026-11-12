@@ -24,14 +24,20 @@ def test_auto_post_is_saved_reloaded_and_cloned(pm, tmp_path):
     assert not pm.profiles["p1"].auto_post_fanpage
     assert pm.set_auto_post("p1", fanpage=True, tiktok=None)
     assert pm.set_auto_post("p1", tiktok=True)
+    assert not pm.profiles["p1"].auto_post_youtube
+    assert pm.set_auto_post("p1", None, None, True)
     saved = json.loads((tmp_path / "profiles.json").read_text(encoding="utf-8"))["p1"]
     assert saved["auto_post_fanpage"] is True and saved["auto_post_tiktok"] is True
+    assert saved["auto_post_youtube"] is True
 
     again = mgr_mod.ProfileManager()
-    assert again.profiles["p1"].auto_post_fanpage and again.profiles["p1"].auto_post_tiktok
+    p1 = again.profiles["p1"]
+    assert p1.auto_post_fanpage and p1.auto_post_tiktok and p1.auto_post_youtube
 
     ok, _ = pm.clone_profile("p1", "p2", include_data=False, new_fingerprint=False)
-    assert ok and pm.profiles["p2"].auto_post_tiktok
+    assert ok and pm.profiles["p2"].auto_post_tiktok and pm.profiles["p2"].auto_post_youtube
+    assert pm.set_auto_post("p1", fanpage=False)  # youtube keeps its value
+    assert pm.profiles["p1"].auto_post_youtube and not pm.profiles["p1"].auto_post_fanpage
     assert not pm.set_auto_post("missing", fanpage=True)
 
 
@@ -110,6 +116,13 @@ def test_api_profile_auto_post_and_upload_dirs(pm, muse_root):
     assert r.json()["auto_post_fanpage"] is True and r.json()["auto_post_tiktok"] is False
     r = client.patch("/profiles/fb1", json={"auto_post_tiktok": True})
     assert r.json()["auto_post_fanpage"] is True and r.json()["auto_post_tiktok"] is True
+    assert r.json()["auto_post_youtube"] is False
+    r = client.patch("/profiles/fb1", json={"auto_post_youtube": True})
+    assert r.json()["auto_post_youtube"] is True and r.json()["auto_post_tiktok"] is True
+    assert client.get("/profiles/fb1").json()["auto_post_youtube"] is True
+    r = client.post("/profiles", json={"name": "yt1", "auto_post_youtube": True})
+    assert r.status_code == 201 and r.json()["auto_post_youtube"] is True
+    assert r.json()["auto_post_fanpage"] is False
 
     up = muse_root / "Videos" / "downloads"
     r = client.put("/settings/upload-dirs", json={"upload_dirs": [str(up)], "muse_upload_dir": ""})

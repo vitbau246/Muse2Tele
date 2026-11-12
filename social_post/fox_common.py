@@ -101,6 +101,10 @@ def open_work_tab(fb: FoxProfileBrowser) -> None:
             return
         tabs = fb.tab_new("about:blank")
         fb.tab = next((t["index"] for t in tabs if t["active"]), len(tabs) - 1)
+        # Camoufox: moi tab la 1 cua so; cua so nam duoi bi giam nhip ve, trang (YouTube Studio, Business Suite)
+        # khong phan hoi bam / go -> click het gio (2026-11-11). Dua tab lam viec len truoc.
+        fb.tab_select(fb.tab)
+        fb.front_for_input = True  # moi lan bam / go: dua tab len truoc lai (bot co the da keo tab Muse len)
     except FoxError as e:
         log(f"Khong mo duoc tab rieng ({e}) -> lam tren tab hien hanh")
         fb.tab = None

@@ -44,6 +44,7 @@ PROTECTED = (
     "foxprofile/data/", "social_post/data/", "social_post/logs/",
     "muse_telebot/muse_telebot_state.json", "muse_telebot/muse_sync.json", "muse_telebot/muse_users.db",
     "muse_telebot/muse_autoapprove.json", "muse_telebot/muse_telebot.log", "muse_telebot/muse_team.json",
+    "muse_telebot/skills/",  # skill pack chu tu cai (mua / chia se / tu viet)
 )
 REQUIREMENTS = ("requirements.txt", "foxprofile/repo/requirements.txt")
 
